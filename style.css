@@ -177,7 +177,7 @@ body {
 }
 
 .page-header {
-  padding: 8px 28px 24px 28px;
+  padding: 48px 28px 24px 28px; /* Pushes the title text below the Dynamic Island */
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -959,11 +959,16 @@ body {
 
 /* Top Story indicators (IG style navigation - shrunken above title) */
 .app-story-indicators {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  width: 100%;
   display: flex;
-  padding: 24px 28px 4px 28px; /* sits nicely above the page header title */
+  padding: 0 28px; /* aligns left edge with title */
   gap: 6px;
   z-index: 100;
   background-color: transparent;
+  pointer-events: none; /* allows clicking items underneath if any */
 }
 
 .story-bar {
@@ -975,6 +980,7 @@ body {
   width: 18px; /* shrunken width, roughly a single character's width */
   flex-grow: 0; /* do not stretch across page */
   cursor: pointer;
+  pointer-events: auto; /* make button itself clickable */
   transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
