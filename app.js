@@ -461,7 +461,7 @@ async function getPartnerName() {
     if (partnerUser && partnerUser.displayName) {
       return partnerUser.displayName;
     }
-    return partnerId === 'user_a' ? 'User A' : 'User B';
+    return partnerId === 'user_a' ? 'User A' : (partnerId === 'user_b' ? 'User B' : partnerId);
   }
   return '筆友';
 }
