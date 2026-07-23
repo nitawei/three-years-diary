@@ -13,6 +13,11 @@ const ASSETS_TO_CACHE = [
   '/app.js',
   '/export-service.js',
   '/apple-touch-icon.png',
+  '/manifest.json',
+  '/og-image.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable.png',
   '/logo_pattern.png',
   '/logo_pattern_transparent.png'
 ];
