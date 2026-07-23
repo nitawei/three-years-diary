@@ -28,7 +28,13 @@
       <button id="btn-open-settings" style="background: rgba(255, 255, 255, 0.9); border: 1px solid var(--color-border); border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition-normal); outline: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 0;" title="帳號設定"><span style="width: 6px; height: 6px; background-color: var(--color-text-main); border-radius: 50%; display: inline-block;"></span></button>
     </div>
 
-
+    <!-- IG Story Style Pagination Indicators -->
+    <div class="app-story-indicators" id="app-story-indicators">
+      <button class="story-bar" id="bar-garden" data-page="garden" title="年熱力圖"></button>
+      <button class="story-bar" id="bar-weekly" data-page="weekly" title="週記回顧"></button>
+      <button class="story-bar active" id="bar-today" data-page="today" title="今日書寫"></button>
+      <button class="story-bar" id="bar-partner" data-page="partner" title="交換日記"></button>
+    </div>
     <!-- Splash Page UI (圖二左) -->
     <div class="app-container" id="splash-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-3xl); box-sizing: border-box; text-align: center; background-color: #904840; cursor: pointer;">
       <div class="splash-center-card" style="width: 180px; height: 180px; background-color: var(--color-bg); display: flex; align-items: center; justify-content: center; border-radius: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.15); box-sizing: border-box; padding: var(--space-sm);">
@@ -50,7 +56,7 @@
         </div>
 
         <!-- Security Info Area (Typing animation container) -->
-        <div id="login-security-info" class="hidden" style="max-width: 320px; width: 100%; font-size: var(--font-size-sm); color: var(--color-text-main); line-height: 1.6; text-align: left; background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); border-radius: var(--radius-sm); padding: var(--space-lg) 18px; box-sizing: border-box; font-family: 'Outfit', sans-serif; min-height: 80px;">
+        <div id="login-security-info" class="hidden" style="max-width: 320px; width: 100%; font-size: var(--font-size-sm); color: var(--color-text-main); line-height: 1.6; text-align: center; background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); border-radius: var(--radius-sm); padding: var(--space-lg) 18px; box-sizing: border-box; font-family: 'Outfit', sans-serif; min-height: 80px;">
           <span id="login-security-text"></span><span class="typing-cursor" style="font-weight: bold; animation: blink 1s infinite;">|</span>
         </div>
       </div>
@@ -86,8 +92,7 @@
       </div>
     </div>
 
-    <!-- First-time User Onboarding -->
-    <div class="app-container hidden" id="onboarding-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px var(--space-3xl); box-sizing: border-box; text-align: left; background-color: #FAF6F0;">
+    <div class="app-container hidden" id="onboarding-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px var(--space-3xl); box-sizing: border-box; text-align: left; background-color: #FCFAF2;">
       <div style="max-width: 320px; width: 100%; display: flex; flex-direction: column;">
         <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 700; color: var(--color-text-main); margin: 0 0 var(--space-xs) 0;">Welcome</h2>
         <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin: 0 0 var(--space-5xl) 0; line-height: 1.5;">開啟您的三年交換日記，請告訴我們如何稱呼您：</p>
@@ -575,14 +580,6 @@
            </div>
          </div>
        </div>
-    </div>
-    <!-- IG Story Style Pagination Indicators -->
-    <div class="app-story-indicators" id="app-story-indicators">
-      <button class="story-bar" id="bar-garden" title="年熱力圖"></button>
-      <button class="story-bar" id="bar-weekly" title="週記回顧"></button>
-      <button class="story-bar active" id="bar-today" title="今日書寫"></button>
-      <button class="story-bar" id="bar-partner" title="交換日記"></button>
-    </div>
   </div>
 
   <script src="utils.js?v=6"></script>

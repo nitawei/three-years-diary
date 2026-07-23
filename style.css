@@ -7,7 +7,7 @@
 :root {
   /* Apple-Style Monochromatic Muted Palette */
   --color-bg-system: #F2F2F7;       /* System background */
-  --color-bg: #D7C4BB;              /* Soft off-white canvas */
+  --color-bg: #FCFAF2;              /* Warm paper off-white canvas */
   --color-card-bg: #FFFFFF;         /* Pure white cards */
   --color-text-main: #1C1C1E;       /* Near black (primary text) */
   --color-text-sub: #8E8E93;        /* Muted gray (secondary text) */
@@ -165,11 +165,19 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background-image: url('paper_texture.jpg');
+  background-color: var(--color-bg);
+  background-blend-mode: multiply;
+  background-size: cover;
 }
 
-/* Elegant Page Header (Date presence minimized) */
+#splash-page {
+  background-image: none !important;
+  background-color: #904840 !important;
+}
+
 .page-header {
-  padding: 16px 28px 24px 28px;
+  padding: 8px 28px 24px 28px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -949,13 +957,13 @@ body {
   display: none !important;
 }
 
-/* Bottom Story indicators (IG style navigation) */
+/* Top Story indicators (IG style navigation - shrunken above title) */
 .app-story-indicators {
   display: flex;
-  padding: 12px 28px 20px 28px; /* Safe padding for bottom positioning */
+  padding: 24px 28px 4px 28px; /* sits nicely above the page header title */
   gap: 6px;
   z-index: 100;
-  background-color: var(--color-bg);
+  background-color: transparent;
 }
 
 .story-bar {
@@ -964,7 +972,8 @@ body {
   border: none;
   padding: 0;
   border-radius: 1.5px;
-  flex-grow: 1;
+  width: 18px; /* shrunken width, roughly a single character's width */
+  flex-grow: 0; /* do not stretch across page */
   cursor: pointer;
   transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
