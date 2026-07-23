@@ -143,7 +143,6 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding-top: 40px; /* Avoid iPhone Dynamic Island/Notch on desktop frame */
 }
 
 @media (max-width: 480px) {
@@ -156,7 +155,6 @@ body {
     border-radius: 0;
     border: none;
     box-shadow: none;
-    padding-top: 47px; /* Safe Area top padding for iPhone Notch/Dynamic Island on real mobile device */
   }
 }
 
@@ -951,10 +949,10 @@ body {
   display: none !important;
 }
 
-/* Top Story indicators (IG style navigation) */
+/* Bottom Story indicators (IG style navigation) */
 .app-story-indicators {
   display: flex;
-  padding: 16px 28px 8px 28px; /* aligns margins with page title headers */
+  padding: 12px 28px 20px 28px; /* Safe padding for bottom positioning */
   gap: 6px;
   z-index: 100;
   background-color: var(--color-bg);
