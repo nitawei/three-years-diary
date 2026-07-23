@@ -1,0 +1,1595 @@
+/* ==========================================================================
+   style.css - 三年日記核心設計系統與 CSS 樣式
+   設計語言：Premium Neo Minimalist Apple-Level Aesthetic
+   ========================================================================== */
+
+/* 1. 設計系統變數與核心設定 */
+:root {
+  /* Apple-Style Monochromatic Muted Palette */
+  --color-bg-system: #F2F2F7;       /* System background */
+  --color-bg: #D7C4BB;              /* Soft off-white canvas */
+  --color-card-bg: #FFFFFF;         /* Pure white cards */
+  --color-text-main: #1C1C1E;       /* Near black (primary text) */
+  --color-text-sub: #8E8E93;        /* Muted gray (secondary text) */
+  --color-text-supporting: #D1D1D6; /* Supporting text */
+  --color-border: rgba(0, 0, 0, 0.04); /* Subtle border */
+  --color-border-visible: #E5E5EA;  /* Solid gray divider */
+  
+  /* Natural Accent Colors (Morandi Palette) */
+  --color-primary: #8E9AAF;         /* Muted steel blue */
+  --color-primary-light: #F0F2F5;   /* Warm gray-blue light bg */
+  
+  /* Natural Mood Dot Colors */
+  --color-mood-black: #5C5C5E;      /* Calm (Charcoal) */
+  --color-mood-yellow: #E9C46A;     /* Joy (Warm Gold) */
+  --color-mood-green: #8A9A86;      /* Peace (Sage Green) */
+  --color-mood-blue: #5282C9;       /* Sorrow (Soft cloudy blue) */
+  --color-mood-red: #E76F51;        /* Wave (Terracotta) */
+  --color-text-red: #AB3B3A;        /* Deep red text */
+
+  /* Ambient Organic Shadows (Large blur + Low opacity) */
+  --shadow-premium: 0 20px 40px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.01);
+  --shadow-hover: 0 30px 60px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
+  --shadow-fab: 0 10px 24px rgba(0, 0, 0, 0.08);
+
+  /* Fonts */
+  --font-serif: "Noto Serif TC", "Georgia", serif;
+  --font-sans: "Outfit", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  
+  /* Premium Apple Corner Radii (Never 4px or 8px!) */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-pill: 9999px;
+  
+  /* Spacing System */
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 10px;
+  --space-md: 12px;
+  --space-lg: 14px;
+  --space-xl: 16px;
+  --space-xxl: 20px;
+  --space-3xl: 24px;
+  --space-4xl: 28px;
+  --space-5xl: 32px;
+
+  /* Typography Sizes */
+  --font-size-xxs: 0.7rem;
+  --font-size-xs: 0.72rem;
+  --font-size-sm: 0.74rem;
+  --font-size-base: 0.78rem;
+  --font-size-md: 0.8rem;
+  --font-size-lg: 0.84rem;
+  --font-size-xl: 0.88rem;
+  --font-size-xxl: 0.95rem;
+  --font-size-3xl: 1.1rem;
+  --font-size-4xl: 1.25rem;
+  --font-size-5xl: 1.5rem;
+
+  /* Icon Sizes */
+  --icon-size-xs: 12px;
+  --icon-size-sm: 16px;
+  --icon-size-md: 20px;
+  --icon-size-lg: 24px;
+
+  /* Natural Slow Transitions */
+  --transition-slow: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  --transition-normal: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Dark Mode Integration */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg-system: #000000;
+    --color-bg: #121212;
+    --color-card-bg: #1C1C1E;
+    --color-text-main: #F5F5F7;
+    --color-text-sub: #8E8E93;
+    --color-text-supporting: #3A3A3C;
+    --color-border: rgba(255, 255, 255, 0.04);
+    --color-border-visible: #2C2C2E;
+    --color-primary-light: #2C2C2E;
+    
+    --color-mood-black: #8E8E93;
+    --color-mood-yellow: #D8A430;
+    --color-mood-green: #6E7D6A;
+    --color-mood-blue: #5282C9;
+    --color-mood-red: #C75A40;
+    --color-text-red: #E76F51;
+    
+    --shadow-premium: 0 20px 40px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.15);
+    --shadow-hover: 0 30px 60px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Global Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-system);
+  color: var(--color-text-main);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  line-height: 1.6;
+  letter-spacing: -0.015em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Centered Device Chassis Frame (Apple-level aesthetic) */
+.device-frame {
+  position: relative;
+  width: 393px;
+  height: 852px;
+  background-color: var(--color-bg);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.15), 0 0 0 12px var(--color-text-main) inset;
+  border: 12px solid var(--color-text-main);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 480px) {
+  body {
+    background-color: var(--color-bg);
+  }
+  .device-frame {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
+
+.app-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Elegant Page Header (Date presence minimized) */
+.page-header {
+  padding: 16px 28px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.header-title {
+  font-family: var(--font-sans);
+  font-size: 3rem; /* Enlarge significantly */
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #434343; /* Changed to #434343 */
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+
+.header-subtitle {
+  font-family: var(--font-sans);
+  font-size: 0.72rem; /* Shrunk date size */
+  font-weight: 500;
+  color: var(--color-text-sub);
+  letter-spacing: 0.12em;
+  margin-top: 6px;
+  margin-left: -1px; /* Optically align the left edge of '2' with the 'T' of TODAY */
+  opacity: 0.6; /* Reduced visual presence */
+}
+
+/* Scrollable main content view */
+.page-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+  scroll-behavior: smooth;
+  padding: 0 28px 48px 28px;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+}
+.page-content::-webkit-scrollbar {
+  display: none;
+}
+
+.diary-editor-card {
+  width: 100%;
+}
+
+/* Premium Neo Minimalist Cards */
+.card {
+  background-color: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-premium);
+  padding: 28px;
+  margin-bottom: 20px;
+  transition: var(--transition-slow);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--color-text-sub);
+  text-transform: uppercase;
+}
+
+.section-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-sub);
+  margin-bottom: 20px;
+  font-weight: 300;
+}
+
+.word-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-supporting);
+}
+
+/* 50-Character Manuscript Grid (10x5 layout, solid line grid style) */
+.manuscript-container {
+  position: relative;
+  width: 100%;
+  margin: 12px 0 28px 0;
+  transition: var(--transition-normal);
+  background-color: transparent;
+}
+
+.manuscript-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr); /* 10 columns */
+  gap: 0; /* No gaps so cells touch each other */
+  width: 100%;
+  border-top: 1.5px solid var(--color-border-visible);
+  border-left: 1.5px solid var(--color-border-visible);
+}
+
+.manuscript-spacer {
+  display: none; /* Spacer is not used in 10x5 layout */
+}
+
+.manuscript-cell {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  background-color: var(--color-card-bg);
+  border: none;
+  border-right: 1.5px solid var(--color-border-visible);
+  border-bottom: 1.5px solid var(--color-border-visible);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: var(--font-serif);
+  font-size: 13pt; /* Enlarged each grid font for writing feel */
+  font-weight: 600;
+  border-radius: 0; /* No rounded corners inside solid grid */
+  user-select: none;
+  box-sizing: border-box;
+  transition: var(--transition-normal);
+}
+
+@media (prefers-color-scheme: dark) {
+  .manuscript-cell {
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+}
+
+.manuscript-cell.has-char {
+  animation: typing-fade 0.2s ease-out;
+}
+
+@keyframes typing-fade {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* 4. Color sync typing text to mood color */
+.manuscript-container.mood-black .manuscript-cell.has-char { color: var(--color-mood-black); }
+.manuscript-container.mood-yellow .manuscript-cell.has-char { color: var(--color-mood-yellow); }
+.manuscript-container.mood-green .manuscript-cell.has-char { color: var(--color-mood-green); }
+.manuscript-container.mood-blue .manuscript-cell.has-char { color: var(--color-mood-blue); }
+.manuscript-container.mood-red .manuscript-cell.has-char { color: var(--color-mood-red); }
+
+/* Caret indicator inside cell */
+.manuscript-cell.active-cursor {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1.5px var(--color-primary);
+  position: relative;
+}
+.manuscript-cell.active-cursor::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  width: 40%;
+  height: 2px;
+  background-color: var(--color-primary);
+  animation: cursor-blink 1s infinite steps(2, start);
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+/* Stretchy hidden input overlay */
+#diary-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: text;
+  resize: none;
+  z-index: 10;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* Mood selector & SAVE pill */
+.diary-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mood-selector {
+  display: flex;
+  align-items: center;
+}
+
+.mood-dots-row {
+  display: flex;
+  gap: 12px;
+}
+
+.mood-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  cursor: pointer;
+  position: relative;
+  transition: var(--transition-normal);
+}
+
+.mood-dot.dot-charcoal { background-color: var(--color-mood-black); }
+.mood-dot.dot-gold { background-color: var(--color-mood-yellow); }
+.mood-dot.dot-sage { background-color: var(--color-mood-green); }
+.mood-dot.dot-sky { background-color: var(--color-mood-blue); }
+.mood-dot.dot-coral { background-color: var(--color-mood-red); }
+
+.mood-dot.active {
+  transform: scale(1.2);
+  border-color: var(--color-card-bg);
+  box-shadow: 0 0 0 1.5px var(--color-text-main);
+}
+
+.btn-save-pill {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background-color: #434343; /* Changed to #434343 */
+  color: var(--color-card-bg);
+  border: none;
+  padding: 10px 24px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+.btn-save-pill:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* 3. Centered Plus Button below Card 1 */
+.plus-button-container {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0;
+  margin-top: 10px;
+}
+
+.btn-circle-plus {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background-color: #434343; /* Changed to #434343 */
+  color: var(--color-card-bg);
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: var(--shadow-fab);
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+
+.btn-circle-plus:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+.btn-circle-plus svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.5px;
+}
+
+/* 2. Hidden Overlay Sliding Memo Drawer (iOS Style) */
+.memo-drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: visibility 0.4s;
+}
+
+.memo-drawer.hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.memo-drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  will-change: opacity; /* GPU acceleration */
+}
+
+.memo-drawer.hidden .memo-drawer-overlay {
+  opacity: 0;
+}
+
+.memo-drawer-content {
+  position: relative;
+  background-color: var(--color-bg);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  width: 100%;
+  height: 86%; /* iOS style bottom-sheet height */
+  max-height: 86vh; /* Mobile viewport safety */
+  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  transform: translateY(0);
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform; /* GPU acceleration */
+}
+
+.memo-drawer.hidden .memo-drawer-content {
+  transform: translateY(100%);
+}
+
+.memo-drawer-handle {
+  width: 38px;
+  height: 5px;
+  background-color: var(--color-border-visible);
+  border-radius: var(--radius-pill);
+  margin: 14px auto 10px auto;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition-normal);
+}
+.memo-drawer-handle:hover {
+  background-color: var(--color-text-sub);
+}
+
+.memo-drawer-scroll {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 0 16px 48px 16px;
+  scrollbar-width: none;
+  scroll-behavior: smooth; /* Smooth scroll */
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+}
+.memo-drawer-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Memo card components inside drawer */
+.memo-placeholder-card {
+  box-shadow: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+}
+
+.memo-placeholder-card .card-header,
+.memo-placeholder-card .section-desc {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#memo-textarea {
+  width: 100%;
+  height: 100px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--color-text-main);
+  background-color: rgba(0, 0, 0, 0.008);
+  resize: none;
+  margin-bottom: 12px;
+  transition: var(--transition-normal);
+}
+#memo-textarea:focus {
+  border-color: var(--color-text-sub);
+  background-color: var(--color-card-bg);
+}
+
+.memo-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start; /* Align buttons to the top of the row */
+  margin-bottom: 16px;
+}
+
+.btn-add-photos {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background-color: var(--color-primary-light);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  border: 1px solid var(--color-border);
+}
+.btn-add-photos:hover {
+  opacity: 0.8;
+}
+
+.icon-inline {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-top: -2px;
+  margin-right: 2px;
+}
+
+.icon-muted {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-supporting);
+}
+
+.upload-controls {
+  display: flex;
+  flex-direction: row; /* Align status side-by-side */
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-status {
+  font-size: 0.72rem;
+  color: var(--color-text-sub);
+  margin-left: 4px;
+  margin-top: 0;
+  text-align: left;
+}
+
+/* Image grid previews */
+.memo-images-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.memo-image-wrapper {
+  position: relative;
+  aspect-ratio: 1/1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+.memo-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.btn-remove-image {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Timeline elements inside drawer */
+.memo-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--color-border-visible);
+  padding-bottom: 80px; /* Leave bottom breathing space for smooth scrolling */
+}
+
+.timeline-item {
+  display: flex;
+  gap: 14px;
+  position: relative;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 36px;
+  top: 18px;
+  bottom: -16px;
+  width: 1px;
+  background-color: var(--color-border-visible);
+}
+.timeline-item:last-child::before {
+  display: none;
+}
+
+.item-time {
+  width: 36px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  margin-top: 2px;
+}
+
+.item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.item-text {
+  font-size: 0.85rem;
+  color: var(--color-text-main);
+  background-color: var(--color-primary-light);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+}
+
+/* Typewriter style for timeline items in drawers and on the Today page */
+#memo-timeline-list,
+#partner-paired-memos-list,
+#review-memo-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--color-border-visible);
+  padding-bottom: 80px;
+  counter-reset: memo-counter;
+}
+
+#memo-timeline-list .timeline-item,
+#partner-paired-memos-list .timeline-item,
+#review-memo-timeline-list .timeline-item {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 16px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 12px 0 !important;
+  margin: 0 !important;
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  box-sizing: border-box;
+}
+
+/* Remove old counters, pseudo-headers and stamps */
+#memo-timeline-list .timeline-item::before,
+#partner-paired-memos-list .timeline-item::before,
+#review-memo-timeline-list .timeline-item::before,
+#memo-timeline-list .timeline-item::after,
+#partner-paired-memos-list .timeline-item::after,
+#review-memo-timeline-list .timeline-item::after,
+#memo-timeline-list .item-time::before,
+#partner-paired-memos-list .item-time::before,
+#review-memo-timeline-list .item-time::before,
+#memo-timeline-list .item-text::before,
+#partner-paired-memos-list .item-text::before,
+#review-memo-timeline-list .item-text::before {
+  display: none !important;
+}
+
+#memo-timeline-list .item-time,
+#partner-paired-memos-list .item-time,
+#review-memo-timeline-list .item-time {
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #2b2b2b;
+  display: inline-block;
+  width: auto;
+  white-space: nowrap;
+}
+
+#memo-timeline-list .item-body,
+#partner-paired-memos-list .item-body,
+#review-memo-timeline-list .item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#memo-timeline-list .item-text,
+#partner-paired-memos-list .item-text,
+#review-memo-timeline-list .item-text {
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  color: #2b2b2b;
+  line-height: 1.5;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0;
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.timeline-item-header {
+  margin-top: 2px;
+}
+
+.timeline-actions {
+  display: flex;
+  gap: 12px;
+}
+
+#memo-timeline-list .action-link,
+#review-memo-timeline-list .action-link {
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  font-size: 0.7rem;
+  color: #8a8a8a;
+  text-decoration: none;
+  cursor: pointer;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+}
+#memo-timeline-list .action-link::before,
+#review-memo-timeline-list .action-link::before {
+  content: '[ ';
+}
+#memo-timeline-list .action-link::after,
+#review-memo-timeline-list .action-link::after {
+  content: ' ]';
+}
+#memo-timeline-list .action-link:hover,
+#review-memo-timeline-list .action-link:hover {
+  color: #1a1a1a;
+  text-decoration: underline;
+}
+#memo-timeline-list .delete-link,
+#review-memo-timeline-list .delete-link {
+  color: var(--color-text-red);
+}
+#memo-timeline-list .delete-link:hover,
+#review-memo-timeline-list .delete-link:hover {
+  color: var(--color-text-red);
+}
+
+
+.photo-placeholders-row {
+  display: flex;
+  gap: 6px;
+}
+
+.photo-placeholder-box {
+  width: 48px;
+  height: 48px;
+  background-color: var(--color-border-visible);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  opacity: 0.5;
+}
+
+.btn-submit-pill {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background-color: #434343; /* Explicitly #434343 color */
+  color: var(--color-card-bg);
+  border: none;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+
+.submit-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* Push buttons to the far right */
+}
+
+#btn-submit-memo {
+  background-color: #434343 !important; /* Force #434343 color in all states */
+  color: var(--color-card-bg) !important;
+}
+#btn-submit-memo:hover {
+  opacity: 0.9;
+}
+.btn-submit-pill:hover {
+  opacity: 0.85;
+}
+
+.btn-cancel-pill {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-primary-light);
+  color: var(--color-text-sub);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  padding: 0;
+  margin-right: 12px;
+}
+.btn-cancel-pill:hover {
+  background-color: var(--color-border-visible);
+  color: var(--color-text-main);
+  opacity: 0.85;
+}
+.btn-cancel-pill svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5px;
+}
+
+/* Timeline actions panel */
+.timeline-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.timeline-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.action-link {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+.action-link:hover {
+  color: var(--color-text-main);
+}
+.action-link.delete-link:hover {
+  color: var(--color-mood-red);
+}
+
+/* Grid of images for each log in timeline */
+.timeline-images-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.timeline-image-wrapper {
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+.timeline-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Top Story indicators (IG style navigation) */
+.app-story-indicators {
+  display: flex;
+  padding: 16px 28px 8px 28px; /* aligns margins with page title headers */
+  gap: 6px;
+  z-index: 100;
+  background-color: var(--color-bg);
+}
+
+.story-bar {
+  height: 3px;
+  background-color: var(--color-border-visible);
+  border: none;
+  padding: 0;
+  border-radius: 1.5px;
+  flex-grow: 1;
+  cursor: pointer;
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.story-bar.active {
+  background-color: #434343;
+}
+
+.story-bar:hover {
+  background-color: var(--color-text-sub);
+}
+.story-bar.active:hover {
+  background-color: #434343;
+}
+
+/* Garden Page & Grid Layouts */
+.garden-content {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+  padding: 0 20px 24px 20px;
+  scrollbar-width: none;
+}
+.garden-content::-webkit-scrollbar {
+  display: none;
+}
+
+.garden-year-card {
+  margin-bottom: 24px;
+  padding: 16px;
+}
+
+.text-accent {
+  color: #434343 !important;
+  font-weight: 700 !important;
+}
+
+.garden-year-stats {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--color-text-sub);
+  font-weight: 500;
+}
+
+.garden-grid {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  gap: 5px;
+  margin-top: 12px;
+}
+
+/* Garden Dot Styling */
+.garden-dot {
+  aspect-ratio: 1 / 1;
+  border-radius: 50%; /* Circle shape */
+  background-color: var(--color-border-visible);
+  cursor: pointer;
+  transition: transform 0.2s ease-out, background-color 0.25s ease-out;
+  position: relative;
+  
+  /* Initial state for entry animation */
+  opacity: 0;
+}
+
+.garden-dot:hover {
+  transform: scale(1.08);
+  z-index: 2;
+}
+
+/* Entry Fade-in Animation */
+.garden-dot.bloom {
+  animation: bloomIn 0.5s ease-out forwards;
+}
+
+@keyframes bloomIn {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Today Completion Pulse Animation */
+.garden-dot.animate-completion {
+  animation: completePulse 0.25s ease-out forwards;
+}
+
+@keyframes completePulse {
+  0% {
+    transform: scale(1.00);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1.00);
+  }
+}
+
+/* Hide Yearly Stats to remove gamification progress tracking */
+.garden-year-stats {
+  display: none !important;
+}
+
+/* Garden Dot Mood Colors */
+.garden-dot.mood-black {
+  background-color: #434343 !important;
+}
+.garden-dot.mood-yellow {
+  background-color: var(--color-mood-yellow) !important;
+}
+.garden-dot.mood-green {
+  background-color: var(--color-mood-green) !important;
+}
+.garden-dot.mood-blue {
+  background-color: var(--color-mood-blue) !important;
+}
+.garden-dot.mood-red {
+  background-color: var(--color-mood-red) !important;
+}
+
+/* Yearly Page Subtitle alignment */
+.yearly-subtitle {
+  margin-left: 8px; /* Shifts '2024-2026' to align with the '2026' card header */
+}
+
+/* Garden Detail Modal Overlay Sheet */
+.garden-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  z-index: 999;
+  display: flex;
+  justify-content: flex-end;
+  flex-direction: column;
+  will-change: opacity; /* GPU acceleration */
+}
+
+.garden-modal-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 86%; /* Match memo drawer height */
+  max-height: 86vh; /* Mobile viewport safety */
+  background-color: var(--color-bg);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform; /* GPU acceleration */
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.garden-modal-header {
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-date-title {
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+  letter-spacing: -0.01em;
+}
+
+.btn-close-modal {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-primary-light);
+  color: var(--color-text-sub);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+
+.btn-close-modal:hover {
+  background-color: var(--color-border-visible);
+  color: var(--color-text-main);
+}
+
+.btn-close-modal i {
+  width: 16px;
+  height: 16px;
+}
+
+.garden-modal-body {
+  flex-grow: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scrollbar-width: none;
+}
+.garden-modal-body::-webkit-scrollbar {
+  display: none;
+}
+
+.modal-mood-indicator {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+}
+
+/* Lined Notebook Card styling for Garden detail view */
+.notebook-card {
+  background-color: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notebook-lines-container {
+  padding: 0 4px;
+}
+
+.lined-notebook-diary {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 2.1;
+  color: var(--mood-color, #434343);
+  text-decoration: underline;
+  text-decoration-color: var(--mood-color-line, rgba(67, 67, 67, 0.4));
+  text-underline-offset: 10px;
+  text-decoration-thickness: 1.5px;
+  word-break: break-all;
+  text-align: justify;
+  margin: 0;
+  padding: 0;
+}
+
+.notebook-date-meta {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+  margin: 12px 0 0 0;
+  padding-left: 4px;
+  letter-spacing: 0.02em;
+}
+
+.modal-btn-delete {
+  background: none;
+  border: none;
+  color: var(--color-text-red);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.modal-btn-delete:hover {
+  opacity: 0.8;
+  background-color: rgba(171, 59, 58, 0.05); /* subtle highlight on hover */
+}
+
+/* Weekly Review Page styles */
+#weekly-page .header-title {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s ease;
+}
+
+#weekly-page .header-title:hover {
+  opacity: 0.75;
+}
+
+.weekly-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 20px 24px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.weekly-content::-webkit-scrollbar {
+  display: none;
+}
+
+.weekly-subtitle-container {
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+}
+
+.btn-week-nav {
+  background: none;
+  border: none;
+  color: var(--color-text-sub);
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px;
+  border-radius: 50%;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-week-nav:hover:not(:disabled) {
+  background-color: var(--color-primary-light);
+  color: var(--color-text-main);
+}
+
+.btn-week-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.btn-week-nav i {
+  width: 14px;
+  height: 14px;
+}
+
+/* DiaryReviewCard component styling */
+.diary-review-card {
+  background-color: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.diary-review-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.diary-review-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.diary-review-card-date {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  letter-spacing: 0.01em;
+}
+
+.diary-review-card-today-label {
+  color: var(--color-text-main);
+  background-color: var(--color-primary-light);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.diary-review-card-mood-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #c7c7cc;
+}
+
+.diary-review-card-body {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--mood-color, #434343);
+  word-break: break-all;
+  margin: 0;
+  text-align: justify;
+}
+
+.diary-review-card-empty {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+  opacity: 0.5;
+  font-style: italic;
+  margin: 0;
+}
+
+/* Partner Diary card specific styles */
+.partner-status-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-primary-light);
+  color: var(--color-text-sub);
+}
+
+.btn-partner-invite:hover {
+  background-color: var(--color-border-visible) !important;
+  transform: scale(1.02);
+}
+
+/* Today page scroll snap configurations */
+#today-page .page-content {
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: 16px;
+  scroll-padding-bottom: 96px;
+  padding-bottom: 500px !important; /* Keep bottom padding so last card can scroll and snap to center */
+}
+
+#today-page .page-content .diary-editor-section,
+#today-page .page-content .partner-diary-card,
+#today-page .page-content #previous-years-list .notebook-card {
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+/* Compact timeline inside previous-years notebook cards */
+.notebook-card-memos {
+  margin-top: 14px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 12px;
+}
+
+.notebook-card-memos .timeline-images-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.notebook-card-memos .timeline-image-wrapper {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.notebook-card-memos .timeline-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Partner panels switcher hover rules */
+.btn-partner-action:hover {
+  background-color: var(--color-border-visible) !important;
+  transform: scale(1.02);
+  transition: var(--transition-normal);
+}
+
+.btn-partner-back:hover {
+  color: var(--color-text-main) !important;
+}
+
+.btn-partner-unlink:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+#profile-switcher:hover {
+  border-color: var(--color-border-visible) !important;
+  background-color: #ffffff !important;
+}
+
+/* Modal review memo trigger buttons hover */
+.btn-review-memo-trigger:hover, #btn-partner-modal-memo:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  border-color: var(--color-text-sub) !important;
+  color: var(--color-text-main) !important;
+  transform: scale(1.03);
+  transition: all 0.2s ease;
+}
+
+/* Typing cursor animations for Login Security display */
+.typing-cursor {
+  font-family: monospace;
+  font-size: 1rem;
+  color: var(--color-text-main);
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ==========================================================================
+   Apple-Level UX Polish - Focus, Active, Transitions & Toasts
+   ========================================================================== */
+
+/* 1. Page Switch Transition */
+.app-container:not(.hidden) {
+  animation: pageFadeIn 0.28s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 2. Apple iOS Tactile Button / Card Active Feedback */
+button:active,
+.btn-save-pill:active,
+.btn-partner-action:active,
+.btn-circle-plus:active,
+.btn-remove-image:active,
+.btn-close-modal:active,
+.story-bar:active,
+.action-link:active,
+.notebook-card:active,
+.garden-dot:active,
+.mood-dot:active,
+.btn-review-memo-trigger:active,
+#btn-partner-modal-memo:active,
+#btn-user-modal-memo:active {
+  opacity: 0.6 !important;
+  transform: scale(0.97) !important;
+  transition: transform 0.1s ease-out, opacity 0.1s ease-out !important;
+}
+
+/* 3. Universal Focus State Styling */
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2.5px rgba(142, 154, 175, 0.18) !important;
+  outline: none !important;
+  transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+/* Focus Within for Manuscript Grid Box */
+.manuscript-container:focus-within {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2.5px rgba(142, 154, 175, 0.18) !important;
+  transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+/* 4. Elegant Toast Notifications */
+.toast-notification {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background-color: rgba(28, 28, 30, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #FFFFFF;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.25s ease;
+}
+
+.toast-notification.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast-notification.error {
+  background-color: rgba(171, 59, 58, 0.9);
+}
+
+/* 5. Minimalist Empty States */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  color: var(--color-text-sub);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  opacity: 0.65;
+  width: 100%;
+  box-sizing: border-box;
+}

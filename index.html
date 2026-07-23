@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>1095</title>
+  <!-- Google Fonts: Outfit for sans-serif UI, Noto Serif TC for elegant serif writing feel -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700&family=Outfit:wght@300;400;500;600&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <link rel="stylesheet" href="style.css?v=6">
+  <!-- PWA Homescreen bookmarking icons -->
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="shortcut icon" href="apple-touch-icon.png" type="image/png">
+</head>
+<body>
+
+  <!-- App 主容器 (手機框體效果) -->
+  <div class="device-frame">
+    <!-- 角色模擬切換器與設定 (右上角置放) -->
+    <div class="profile-switcher-container" style="position: absolute; right: var(--space-xxl); top: 38px; z-index: 99; display: flex; align-items: center; gap: var(--space-xs);">
+      <select id="profile-switcher" style="background-color: rgba(255, 255, 255, 0.9); border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 2px var(--space-sm); font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); cursor: pointer; outline: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 24px; display: inline-flex; align-items: center; transition: var(--transition-normal);">
+        <option value="user_a">我 (User A)</option>
+        <option value="user_b">筆友 (User B)</option>
+      </select>
+      <button id="btn-open-settings" style="background: rgba(255, 255, 255, 0.9); border: 1px solid var(--color-border); border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition-normal); outline: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 0;" title="帳號設定"><span style="width: 6px; height: 6px; background-color: var(--color-text-main); border-radius: 50%; display: inline-block;"></span></button>
+    </div>
+
+    <!-- IG Story Style Pagination Indicators -->
+    <div class="app-story-indicators" id="app-story-indicators">
+      <button class="story-bar" id="bar-garden" title="年熱力圖"></button>
+      <button class="story-bar" id="bar-weekly" title="週記回顧"></button>
+      <button class="story-bar active" id="bar-today" title="今日書寫"></button>
+      <button class="story-bar" id="bar-partner" title="交換日記"></button>
+    </div>
+
+    <!-- Splash Page UI (圖二左) -->
+    <div class="app-container" id="splash-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-3xl); box-sizing: border-box; text-align: center; background-color: #904840; cursor: pointer;">
+      <div class="splash-center-card" style="width: 180px; height: 180px; background-color: var(--color-bg); display: flex; align-items: center; justify-content: center; border-radius: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.15); box-sizing: border-box; padding: var(--space-sm);">
+        <img src="logo_pattern_transparent.png" alt="1095 Logo" style="width: 100%; height: 100%; object-fit: contain;">
+      </div>
+    </div>
+
+    <!-- Login Page UI (圖二右) -->
+    <div class="app-container hidden" id="login-page" style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; min-height: 100vh; padding: 80px var(--space-3xl) 80px var(--space-3xl); box-sizing: border-box; text-align: center; background-color: var(--color-bg);">
+      <div style="width: 100%; display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center;">
+        <!-- Logo image displayed directly on background -->
+        <img src="logo_pattern_transparent.png" alt="1095 Logo" style="width: 160px; height: 160px; object-fit: contain; margin-bottom: 50px;">
+        
+        <!-- Buttons container -->
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 48px; width: 100%; margin-bottom: 30px;">
+          <button id="btn-login-trigger" style="background: none; border: none; font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 400; color: var(--color-text-main); cursor: pointer; outline: none; transition: opacity var(--transition-normal); padding: var(--space-xs) var(--space-3xl);">Login</button>
+          
+          <button id="btn-security-trigger" style="background: none; border: none; font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 400; color: var(--color-text-main); cursor: pointer; outline: none; transition: opacity var(--transition-normal); padding: var(--space-xs) var(--space-3xl);">Security</button>
+        </div>
+
+        <!-- Security Info Area (Typing animation container) -->
+        <div id="login-security-info" class="hidden" style="max-width: 320px; width: 100%; font-size: var(--font-size-sm); color: var(--color-text-main); line-height: 1.6; text-align: left; background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); border-radius: var(--radius-sm); padding: var(--space-lg) 18px; box-sizing: border-box; font-family: 'Outfit', sans-serif; min-height: 80px;">
+          <span id="login-security-text"></span><span class="typing-cursor" style="font-weight: bold; animation: blink 1s infinite;">|</span>
+        </div>
+      </div>
+
+      <!-- Login Options Drawer Overlay (Google / Apple selection sheet) -->
+      <div class="garden-modal-overlay hidden" id="login-options-modal" style="z-index: 1200; background-color: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; position: absolute; top: 0; left: 0; right: 0; bottom: 0;">
+        <div class="garden-modal-sheet" style="position: relative; bottom: auto; left: auto; right: auto; height: auto; max-height: 320px; width: 90%; max-width: 320px; display: flex; flex-direction: column; border-radius: var(--radius-lg); padding: var(--space-3xl) var(--space-xxl); box-sizing: border-box; background-color: var(--color-card-bg);">
+          <header class="garden-modal-header" style="border-bottom: none; padding: 0 0 var(--space-xl) 0; display: flex; justify-content: space-between; align-items: center;">
+            <span class="modal-date-title" style="color: var(--color-text-main); font-weight: 700; font-size: var(--font-size-xxl);">請選擇登入方式</span>
+            <button class="btn-close-modal" id="btn-close-login-modal" style="background: none; border: none; cursor: pointer; padding: var(--space-xxs); display: inline-flex; align-items: center; justify-content: center;"><i data-lucide="x" style="width: 18px; height: 18px; color: var(--color-text-sub);"></i></button>
+          </header>
+          <div style="display: flex; flex-direction: column; gap: var(--space-md); width: 100%;">
+            <button id="btn-login-google" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-md) var(--space-xl); background-color: var(--color-card-bg); border: 1px solid var(--color-border); border-radius: var(--radius-pill); font-family: 'Outfit', sans-serif; font-size: var(--font-size-lg); font-weight: 700; color: var(--color-text-main); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.03); box-sizing: border-box; outline: none; transition: var(--transition-normal);">
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69a5.74 5.74 0 0 1-2.49 3.77v3.13h4.02c2.35-2.16 3.52-5.43 3.52-8.75z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-4.02-3.13c-1.12.75-2.54 1.19-3.94 1.19-3.04 0-5.61-2.05-6.53-4.82H1.31v3.2 A11.98 11.98 0 0 0 12 24z"/>
+                <path fill="#FBBC05" d="M5.47 14.33a7.2 7.2 0 0 1 0-4.66V6.47H1.31a11.97 11.97 0 0 0 0 11.06l4.16-3.2z"/>
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.31 2.67 1.31 6.47l4.16 3.2c.92-2.77 3.49-4.92 6.53-4.92z"/>
+              </svg>
+              Continue with Google
+            </button>
+            <button id="btn-login-apple" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-md) var(--space-xl); background-color: #000; border: none; border-radius: var(--radius-pill); font-family: 'Outfit', sans-serif; font-size: var(--font-size-lg); font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.05); box-sizing: border-box; outline: none; transition: var(--transition-normal);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-1 .04-2.21.67-2.93 1.49-.62.69-1.16 1.84-1.01 2.96 1.12.09 2.27-.58 2.95-1.39z"/>
+              </svg>
+              Continue with Apple
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- First-time User Onboarding -->
+    <div class="app-container hidden" id="onboarding-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px var(--space-3xl); box-sizing: border-box; text-align: left; background-color: #FAF6F0;">
+      <div style="max-width: 320px; width: 100%; display: flex; flex-direction: column;">
+        <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 700; color: var(--color-text-main); margin: 0 0 var(--space-xs) 0;">Welcome</h2>
+        <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin: 0 0 var(--space-5xl) 0; line-height: 1.5;">開啟您的三年時光隨筆旅程。請告訴我們如何稱呼您：</p>
+        
+        <div style="margin-bottom: var(--space-3xl); position: relative;">
+          <label style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: var(--space-xs);">What should we call you?</label>
+          <input type="text" id="onboarding-name-input" maxlength="20" placeholder="請輸入暱稱..." style="width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: var(--space-md) var(--space-xxl); font-size: var(--font-size-xl); outline: none; background-color: var(--color-card-bg); color: var(--color-text-main); box-sizing: border-box;">
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding: 0 var(--space-xs);">
+            <span id="onboarding-error-msg" style="color: #AB3B3A; font-size: 0.7rem; font-weight: 700;"></span>
+            <span id="onboarding-char-counter" style="color: #a0a0a0; font-size: 0.7rem; font-family: monospace;">0 / 10</span>
+          </div>
+        </div>
+        
+        <button id="btn-onboarding-submit" style="width: 100%; padding: var(--space-md) 0; background-color: var(--color-text-main); border: none; color: white; font-size: var(--font-size-lg); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; transition: var(--transition-normal); text-align: center;">
+          Continue
+        </button>
+      </div>
+    </div>
+
+    <div class="app-container" id="today-page">
+      
+      <!-- 頁面頂部日期區 -->
+      <header class="page-header" style="position: relative; display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <h1 class="header-title">TODAY</h1>
+          <span id="sync-status-indicator" style="font-family: 'Outfit', sans-serif; font-size: var(--font-size-xxs); font-weight: 700; padding: 2px var(--space-sm); border-radius: var(--radius-pill); background-color: rgba(138, 154, 134, 0.15); color: var(--color-mood-green); transition: var(--transition-normal);">已同步</span>
+        </div>
+        <p class="header-subtitle">2026.07.15</p>
+      </header>
+
+      <!-- 每日備份提醒橫幅 (Daily Backup Reminder Banner) -->
+      <div id="backup-reminder-banner" class="hidden" style="background-color: rgba(233, 196, 106, 0.1); border: 1px solid rgba(233, 196, 106, 0.25); border-radius: var(--radius-sm); padding: var(--space-sm) var(--space-lg); margin: 0 var(--space-xl) var(--space-lg) var(--space-xl); font-size: var(--font-size-sm); line-height: 1.5; color: #b0840c; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; font-family: 'Outfit', sans-serif;">
+        <span>⏰ 為了您的日記資料安全，請立即備份。</span>
+        <div style="display: flex; align-items: center; gap: var(--space-xs);">
+          <button id="btn-banner-backup" style="background: none; border: 1px solid #b0840c; border-radius: var(--radius-pill); padding: 2px var(--space-sm); font-size: var(--font-size-xxs); font-weight: 700; color: #b0840c; cursor: pointer; transition: var(--transition-normal); white-space: nowrap;">立即備份</button>
+          <button id="btn-banner-close" style="background: none; border: none; font-size: 0.85rem; font-weight: 700; color: #b0840c; cursor: pointer; padding: 0 var(--space-xxs); line-height: 1; transition: var(--transition-normal); opacity: 0.7;" title="關閉提醒">&times;</button>
+        </div>
+      </div>
+
+      <!-- 主要內容區 (以日記書寫為中心) -->
+      <main class="page-content">
+
+        <!-- 今日日記書寫與隨筆整合區 (Snapping Section) -->
+        <section class="diary-editor-section">
+          <!-- 今日日記書寫區卡片 (Today's Diary Writing Area) -->
+          <div class="card diary-editor-card" style="margin-bottom: 0;">
+            <div class="card-header">
+              <span class="section-title">書寫今日</span>
+              <span class="word-count" id="diary-word-count">0 / 50</span>
+            </div>
+
+            <!-- 50格稿紙編輯器區域 -->
+            <div class="manuscript-container" id="manuscript-container-box">
+              <!-- 隱藏的輸入框，滿版覆蓋以利點擊與輸入 -->
+              <textarea id="diary-textarea" maxlength="50" placeholder="點擊格子，寫下今天最深刻的一件事..."></textarea>
+              <!-- 作文格子（50格）由 JS 動態生成 -->
+              <div id="manuscript-grid" class="manuscript-grid"></div>
+            </div>
+
+            <!-- 心情顏色選擇與儲存 -->
+            <div class="diary-editor-footer">
+              <div class="mood-selector">
+                <div class="mood-dots-row">
+                  <button class="mood-dot dot-charcoal active" data-mood="black" title="普通"></button>
+                  <button class="mood-dot dot-gold" data-mood="yellow" title="喜悅"></button>
+                  <button class="mood-dot dot-sage" data-mood="green" title="平靜"></button>
+                  <button class="mood-dot dot-sky" data-mood="blue" title="孤單"></button>
+                  <button class="mood-dot dot-coral" data-mood="red" title="波瀾"></button>
+                </div>
+              </div>
+              
+              <button id="btn-save-diary" class="btn-save-pill">
+                SAVE
+              </button>
+            </div>
+          </div>
+
+          <!-- 置中的圓形 "+" 按鈕 (點選才出現 Memo) -->
+          <div class="plus-button-container" style="margin-top: 16px; margin-bottom: 8px;">
+            <button class="btn-circle-plus" id="btn-open-memo" title="加入隨筆">
+              <i data-lucide="plus"></i>
+            </button>
+        </section>
+
+
+
+        <!-- 三年同日回顧區塊 (Three-Year Same Day Review Section) -->
+        <section id="previous-years-review-section" style="margin-top: 20px; display: none;">
+          <div class="section-divider-title" style="margin: 24px 0 12px 8px; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 700; color: var(--color-text-sub); letter-spacing: 0.05em; text-transform: uppercase;">那年的今天</div>
+          <div id="previous-years-list" style="display: flex; flex-direction: column; gap: 14px;">
+            <!-- JS 動態生成往年同月同日日記卡片 (橫線唯讀筆記本樣式) -->
+          </div>
+        </section>
+
+      </main>
+
+      <!-- 隱藏的備忘錄滑出式抽屜 (iOS Style Bottom Drawer) -->
+      <div class="memo-drawer hidden" id="memo-drawer">
+        <div class="memo-drawer-overlay" id="memo-drawer-overlay"></div>
+        <div class="memo-drawer-content">
+          <!-- 頂部拖拽條（也是關閉按鈕） -->
+          <div class="memo-drawer-handle" id="btn-close-memo" title="收起隨筆"></div>
+          
+          <div class="memo-drawer-scroll">
+            <section class="card memo-placeholder-card">
+              <div class="card-header">
+                <span class="section-title">隨筆</span>
+                <i data-lucide="bookmark" class="icon-muted"></i>
+              </div>
+              
+              <input type="hidden" id="memo-id-input" value="">
+
+              <!-- 備忘錄輸入框 -->
+              <textarea id="memo-textarea" placeholder="寫下詳細的心情隨筆或日常記錄..."></textarea>
+
+              <!-- 圖片加入區 -->
+              <div class="memo-actions-row">
+                <div class="upload-controls">
+                  <label for="image-upload-input" class="btn-add-photos">
+                    <i data-lucide="image" class="icon-inline"></i> 加入圖片
+                  </label>
+                  <input type="file" id="image-upload-input" accept="image/*" multiple class="hidden">
+                  <span class="upload-status" id="upload-status-text">未加入圖片</span>
+                </div>
+                
+                <div class="submit-controls">
+                  <button id="btn-cancel-memo" class="btn-cancel-pill hidden" title="取消修改"><i data-lucide="x"></i></button>
+                  <button id="btn-submit-memo" class="btn-submit-pill">ADD</button>
+                </div>
+              </div>
+              
+              <!-- 選擇的圖片預覽 -->
+              <div id="memo-images-preview" class="memo-images-grid"></div>
+
+              <!-- 動態時光備忘 timeline 列表 -->
+              <div class="memo-timeline" id="memo-timeline-list">
+                <!-- 由 JS 動態渲染備忘錄條目 -->
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 週記回顧頁面 (Weekly Review View) -->
+    <div class="app-container hidden" id="weekly-page">
+      <header class="page-header" style="position: relative;">
+        <h1 class="header-title">WEEKLY</h1>
+        <div class="weekly-subtitle-container">
+          <button class="btn-week-nav" id="btn-prev-week" title="前一週">
+            <i data-lucide="chevron-left"></i>
+          </button>
+          <span class="header-subtitle yearly-subtitle" id="weekly-range-text">7/9 - 7/15</span>
+          <button class="btn-week-nav" id="btn-next-week" title="後一週" disabled>
+            <i data-lucide="chevron-right"></i>
+          </button>
+        </div>
+      </header>
+      
+      <main class="page-content weekly-content" id="weekly-review-list">
+        <!-- 由 JS 動態渲染 7 天的日記卡片 (DiaryReviewCard) -->
+      </main>
+    </div>
+
+    <!-- 年熱力圖頁面 (Yearly View) -->
+    <div class="app-container hidden" id="garden-page">
+      <header class="page-header">
+        <h1 class="header-title">YEARLY</h1>
+        <p class="header-subtitle yearly-subtitle" id="yearly-range-subtitle">2024-2026</p>
+      </header>
+      
+      <main class="page-content garden-content" id="garden-grids-container">
+        <!-- JS 動態加載三年熱力圖 -->
+      </main>
+    </div>
+
+    <!-- 筆友交換日記頁面 (Partner Exchange View) -->
+    <div class="app-container hidden" id="partner-page">
+      <header class="page-header">
+        <h1 class="header-title">EXCHANGE</h1>
+        <p class="header-subtitle yearly-subtitle">筆友交換日記</p>
+      </header>
+
+      <main class="page-content">
+        <!-- 伴侶日記卡片 (Partner Diary Placeholder Card) -->
+        <section class="card partner-diary-card" style="margin-top: var(--space-xl);">
+          <div class="card-header">
+            <span class="section-title">交換日記</span>
+            <span class="partner-status-tag" id="partner-status-tag">尚未聯結</span>
+          </div>
+          
+          <div class="partner-card-body">
+            <!-- 1. 尚未聯結首頁面 -->
+            <div id="partner-unlinked-panel" class="partner-panel" style="text-align: center; padding: var(--space-xl) 0 var(--space-xs) 0;">
+              <p style="font-size: var(--font-size-lg); color: var(--color-text-sub); margin-bottom: var(--space-xl);">與筆友連結，交換三年日記。</p>
+              <div style="display: flex; justify-content: center; gap: var(--space-md);">
+                <button class="btn-partner-action" id="btn-partner-gen-code" style="background-color: var(--color-primary-light); border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 6px var(--space-lg); font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-main); cursor: pointer;">
+                   產生邀請碼
+                </button>
+                <button class="btn-partner-action" id="btn-partner-enter-code" style="background-color: var(--color-primary-light); border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 6px var(--space-lg); font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-main); cursor: pointer;">
+                   輸入邀請碼
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. 顯示產生的邀請碼頁面 -->
+            <div id="partner-invite-gen-panel" class="partner-panel hidden" style="text-align: center; padding: var(--space-md) 0 var(--space-xs) 0;">
+              <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin-bottom: var(--space-xs);">請分享此 6 位數邀請碼給筆友，輸入即可啟用：</p>
+              <div class="partner-pin-display" id="partner-pin-box" style="font-family: monospace; font-size: var(--font-size-5xl); font-weight: 700; color: var(--color-text-main); background: rgba(0,0,0,0.03); border: 1px dashed var(--color-border); border-radius: var(--radius-sm); display: inline-block; padding: var(--space-xs) var(--space-3xl); letter-spacing: 0.1em; margin-bottom: var(--space-md);">------</div>
+              <div>
+                <button class="btn-partner-back" id="btn-partner-gen-back" style="background: none; border: none; font-size: var(--font-size-xs); color: var(--color-text-sub); text-decoration: underline; cursor: pointer;">返回</button>
+              </div>
+            </div>
+
+            <!-- 3. 輸入邀請碼頁面 -->
+            <div id="partner-invite-input-panel" class="partner-panel hidden" style="text-align: center; padding: var(--space-md) 0 var(--space-xs) 0;">
+              <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin-bottom: var(--space-xs);">請輸入筆友的 6 位數邀請碼：</p>
+              <div style="display: flex; justify-content: center; gap: var(--space-xs); margin-bottom: var(--space-md);">
+                <input type="text" id="partner-pin-input" placeholder="000000" maxlength="6" style="width: 100px; text-align: center; font-family: monospace; font-size: var(--font-size-3xl); font-weight: 700; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-xxs) var(--space-xs); outline: none; background: var(--color-card-bg); color: var(--color-text-main);">
+                <button class="btn-save-pill" id="btn-partner-verify-code" style="padding: var(--space-xxs) var(--space-lg); font-size: var(--font-size-sm);">驗證</button>
+              </div>
+              <div>
+                <button class="btn-partner-back" id="btn-partner-input-back" style="background: none; border: none; font-size: var(--font-size-xs); color: var(--color-text-sub); text-decoration: underline; cursor: pointer;">返回</button>
+              </div>
+            </div>
+
+            <!-- 4. 已聯結展示伴侶今日日記頁面 -->
+            <div id="partner-paired-panel" class="partner-panel hidden" style="position: relative; padding-bottom: var(--space-3xl);">
+              <p id="partner-paired-meta" style="font-size: var(--font-size-xxs); color: var(--color-text-sub); opacity: 0.8; margin-top: 2px; margin-bottom: 10px;">
+                筆友今天尚未寫下日記字句。
+              </p>
+              <!-- 伴侶日記內容（10*5 實線稿紙格子，唯讀） -->
+              <div class="manuscript-container mood-black" id="partner-manuscript-container" style="margin-top: var(--space-sm); margin-bottom: var(--space-md);">
+                <div id="partner-manuscript-grid" class="manuscript-grid"></div>
+              </div>
+              
+              <!-- 伴侶今日 memos 隨筆 (直接顯示) -->
+              <div id="partner-paired-memos-container" style="margin-top: var(--space-lg); border-top: 1px dashed var(--color-border); padding-top: var(--space-md); display: none;">
+                <div class="section-divider-title" style="margin: 0 0 var(--space-xs) var(--space-xxs); font-size: var(--font-size-xs); color: var(--color-text-sub); font-weight: 700; text-transform: none;">筆友的隨筆</div>
+                <div class="notebook-card-memos" id="partner-paired-memos-list">
+                   <!-- JS 動態寫入隨筆項目 -->
+                </div>
+              </div>
+
+              <button class="btn-partner-unlink" id="btn-partner-unlink" style="position: absolute; right: 0; bottom: 0; background: rgba(171, 59, 58, 0.05); border: none; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-red); cursor: pointer; transition: var(--transition-normal); padding: 0;" title="解除聯結">
+                <i data-lucide="unlink" style="width: var(--icon-size-xs); height: var(--icon-size-xs);"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- 時光細節對照彈出視窗 (Garden Detail Overlay Sheet) -->
+    <div class="garden-modal-overlay hidden" id="garden-detail-modal">
+      <div class="garden-modal-sheet">
+        <header class="garden-modal-header">
+          <span class="modal-date-title" id="modal-date-text">2026.07.15</span>
+          <button class="btn-close-modal" id="btn-close-garden-modal">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        
+        <div class="garden-modal-body">
+          <!-- 該日記書寫卡片（橫線筆記樣式） -->
+          <div class="card notebook-card">
+            <div class="card-header" style="padding-bottom: 8px;">
+            <span class="section-title">日記</span>
+            <button class="modal-btn-delete" id="modal-btn-delete-diary">刪除</button>
+          </div>
+            <div class="notebook-lines-container">
+              <p id="modal-notebook-text" class="lined-notebook-diary">
+                <!-- JS 動態寫入文字 -->
+              </p>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+              <p class="notebook-date-meta" id="modal-notebook-meta" style="margin-top: 0;"></p>
+              <button id="btn-user-modal-memo" style="background: none; border: 1px solid var(--color-border); border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.86rem; font-weight: 600; color: var(--color-text-sub); cursor: pointer; padding: 0; line-height: 1;" title="閱讀隨筆">+</button>
+            </div>
+          </div>
+
+          <!-- 伴侶日記對照卡片 (已配對且夥伴當天有寫時才動態顯示) -->
+          <div class="card notebook-card hidden" id="modal-partner-notebook-card" style="margin-top: 14px; box-shadow: none; border: 1px solid var(--color-border);">
+            <div class="card-header" style="padding-bottom: 8px;">
+              <span class="section-title" style="color: var(--color-text-sub);">交換日記</span>
+            </div>
+            <div class="notebook-lines-container">
+              <p id="modal-partner-notebook-text" class="lined-notebook-diary">
+                <!-- JS 動態寫入文字 -->
+              </p>
+            </div>
+             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-xs);">
+               <p class="notebook-date-meta" id="modal-partner-notebook-meta" style="font-size: var(--font-size-xs); color: var(--color-text-sub); opacity: 0.8; margin-top: 0;"></p>
+               <button id="btn-partner-modal-memo" style="background: none; border: 1px solid var(--color-border); border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.86rem; font-weight: 600; color: var(--color-text-sub); cursor: pointer; padding: 0; line-height: 1;" title="閱讀隨筆">+</button>
+             </div>
+           </div>
+         </div>
+       </div>
+     </div>
+
+     <!-- 帳號與設定彈出視窗 (Settings Modal Overlay) -->
+     <div class="garden-modal-overlay hidden" id="settings-modal" style="z-index: 1200;">
+       <div class="garden-modal-sheet" style="max-height: 520px; display: flex; flex-direction: column;">
+         <header class="garden-modal-header">
+           <span class="modal-date-title" style="font-weight: 700;">帳號與設定</span>
+           <button class="btn-close-modal" id="btn-close-settings-modal">
+             <i data-lucide="x"></i>
+           </button>
+         </header>
+         
+         <div class="garden-modal-body" style="padding: var(--space-xl) var(--space-xxl) var(--space-3xl) var(--space-xxl); text-align: center; flex: 1; overflow-y: auto; width: 100%; box-sizing: border-box;">
+           <!-- 1. 個人資料 -->
+           <div style="text-align: left; margin-bottom: var(--space-xxl); border-bottom: 1px dashed var(--color-border); padding-bottom: var(--space-xl);">
+             <h3 style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">個人資料</h3>
+             <div style="display: flex; flex-direction: column; gap: var(--space-sm); margin-bottom: var(--space-lg); text-align: left;">
+               <div>
+                 <label style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: 6px; text-align: left;">暱稱：</label>
+                 <div style="display: flex; gap: var(--space-xs); align-items: center; justify-content: flex-start;">
+                   <input type="text" id="settings-name-input" maxlength="20" placeholder="請輸入暱稱..." style="flex: 1; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: var(--space-xs) var(--space-xl); font-size: var(--font-size-md); outline: none; background-color: var(--color-card-bg); color: var(--color-text-main); box-sizing: border-box; text-align: left;">
+                   <button id="btn-save-settings-name" style="padding: var(--space-xs) var(--space-xl); background-color: var(--color-text-main); border: none; color: white; font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; transition: var(--transition-normal); white-space: nowrap;">儲存</button>
+                 </div>
+                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; padding: 0 4px; flex-direction: row;">
+                   <span id="settings-name-error" style="color: #AB3B3A; font-size: 0.68rem; font-weight: 700; text-align: left;"></span>
+                   <span id="settings-name-counter" style="color: #a0a0a0; font-size: 0.68rem; font-family: monospace;">0 / 10</span>
+                 </div>
+               </div>
+               <div style="font-size: var(--font-size-sm); color: var(--color-text-sub); line-height: 1.4; text-align: left;">
+                 登入方式：<span id="settings-provider-span" style="font-weight: 700;">-</span><br>
+                 帳號信箱：<span id="settings-email-span">-</span>
+               </div>
+             </div>
+             <button class="btn-partner-action" id="btn-logout" style="width: 100%; padding: var(--space-xs) 0; background-color: rgba(0,0,0,0.03); border: 1px solid var(--color-border); color: var(--color-text-main); font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; text-align: center;">
+               登出帳號
+             </button>
+           </div>
+
+           <!-- 2. 已封存的日記 -->
+           <div style="border-bottom: 1px dashed var(--color-border); padding-bottom: var(--space-xl); margin-bottom: var(--space-xxl); text-align: left; width: 100%; box-sizing: border-box;">
+             <h3 style="font-size: var(--font-size-xl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">已封存的日記</h3>
+             <div id="archived-diaries-list" class="empty-state">
+               無已封存的日記。
+             </div>
+           </div>
+
+           <!-- 3. 資料管理 -->
+           <div style="text-align: left; margin-bottom: var(--space-xxl);">
+             <h3 style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">資料管理</h3>
+             <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin-bottom: var(--space-lg); line-height: 1.5; text-align: left;">匯出您的所有日記備份，或永久刪除您的個人帳號資料。</p>
+             
+             <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box;">
+               <button class="btn-partner-action" id="btn-backup-now" style="width: 100%; padding: var(--space-sm) 0; background: none; border: 1px solid var(--color-border); font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; color: var(--color-text-main); box-sizing: border-box; text-align: center;">
+                 備份日記
+               </button>
+               <button class="btn-partner-action" id="btn-restore-now" style="width: 100%; padding: var(--space-sm) 0; background: none; border: 1px solid var(--color-border); font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; color: var(--color-text-main); box-sizing: border-box; text-align: center;">
+                 還原備份
+               </button>
+               <button class="btn-save-pill" id="btn-trigger-delete-flow" style="background-color: rgba(171, 59, 58, 0.05); color: var(--color-text-red); border: 1px solid rgba(171, 59, 58, 0.2); width: 100%; padding: var(--space-sm) 0; font-weight: 700; font-size: var(--font-size-md); border-radius: var(--radius-pill); cursor: pointer; transition: var(--transition-normal); box-sizing: border-box; text-align: center; margin: 0;">
+                 匯出日記並永久刪除帳號
+               </button>
+             </div>
+             <input type="file" id="backup-file-input" accept=".json" style="display: none;">
+           </div>
+
+          <!-- 開發者測試工具 -->
+          <div style="border-top: 1px dashed var(--color-border); padding-top: var(--space-xl); text-align: left; width: 100%; box-sizing: border-box;">
+            <h3 style="font-size: var(--font-size-base); font-weight: 700; color: var(--color-text-sub); margin-bottom: var(--space-xs); text-align: left;">開發者調試工具</h3>
+            <button class="btn-partner-action" id="btn-dev-trigger-completion" style="background-color: rgba(138, 154, 134, 0.05); border: 1px solid rgba(138, 154, 134, 0.2); color: var(--color-mood-green); width: 100%; padding: 10px 0; font-size: var(--font-size-sm); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; box-sizing: border-box; text-align: center;">
+              [開發者測試] 模擬三年期滿總結
+            </button>
+            <button class="btn-partner-action" id="btn-dev-generate-mock-data" style="background-color: rgba(138, 154, 134, 0.05); border: 1px solid rgba(138, 154, 134, 0.2); color: var(--color-mood-green); width: 100%; padding: 10px 0; font-size: var(--font-size-sm); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; box-sizing: border-box; text-align: center; margin-top: var(--space-xs);">
+              [開發者測試] 生成隨機歷史日記數據
+            </button>
+            <div style="margin-top: var(--space-lg); text-align: left; width: 100%;">
+              <label style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-text-sub); display: block; margin-bottom: 6px; text-align: left;">[開發者測試] 模擬目前年份</label>
+              <select id="dev-active-year-select" style="width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 8px var(--space-xl); font-size: var(--font-size-base); background-color: var(--color-card-bg); color: var(--color-text-main); outline: none; box-sizing: border-box; font-family: 'Outfit', sans-serif; text-align: left;">
+                <option value="2026-07-15" selected>2026 年 (第三年)</option>
+                <option value="2025-07-15">2025 年 (第二年)</option>
+                <option value="2024-07-15">2024 年 (第一年)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="garden-modal-overlay hidden" id="delete-confirm-modal" style="z-index: 1300; background-color: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
+      <div class="garden-modal-sheet" style="position: relative; bottom: auto; left: auto; right: auto; height: auto; max-height: 480px; width: 90%; max-width: 320px; display: flex; flex-direction: column; border-radius: var(--radius-lg);">
+        <header class="garden-modal-header" style="border-bottom: none; padding-bottom: 0;">
+          <span class="modal-date-title" style="color: var(--color-mood-red); font-weight: 700;">⚠ 刪除警告</span>
+          <button class="btn-close-modal" id="btn-close-delete-confirm-modal">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        
+        <div class="garden-modal-body" style="padding: var(--space-xl) var(--space-xxl) var(--space-3xl) var(--space-xxl); text-align: left; flex: 1;">
+          <div style="background-color: rgba(231, 111, 81, 0.05); border: 1px solid rgba(231, 111, 81, 0.1); border-radius: var(--radius-sm); padding: var(--space-md); margin-bottom: var(--space-xl);">
+            <p style="font-size: var(--font-size-base); color: var(--color-mood-red); font-weight: 700; line-height: 1.5; margin: 0;">
+              After export, your account and all diary data will be permanently deleted.
+            </p>
+            <p style="font-size: var(--font-size-xxs); color: var(--color-text-sub); line-height: 1.4; margin-top: var(--space-xxs); margin-bottom: 0;">
+              此操作為不可逆之交易，您將自動下載包含所有日記、隨筆與照片的 PDF 備份，隨後所有儲存將被永久銷毀。
+            </p>
+          </div>
+          
+          <label style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: var(--space-xxs);">請輸入密碼以確認身份 (模擬密碼為 123456)：</label>
+          <input type="password" id="delete-confirm-password" placeholder="請輸入密碼..." style="width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-xs) var(--space-md); font-size: var(--font-size-lg); outline: none; margin-bottom: var(--space-xxl); background-color: var(--color-card-bg); color: var(--color-text-main); box-sizing: border-box;">
+          
+          <div style="display: flex; gap: var(--space-sm);">
+             <button class="btn-partner-action" id="btn-cancel-delete" style="flex: 1; padding: 10px 0; background: none; border: 1px solid var(--color-border); font-size: var(--font-size-base); border-radius: var(--radius-pill); cursor: pointer;">取消</button>
+             <button class="btn-save-pill" id="btn-confirm-export-delete" style="flex: 1; padding: 10px 0; background-color: var(--color-mood-red); border: none; color: white; font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer;">確認匯出與刪除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 備份/還原密碼輸入彈出視窗 (Backup/Restore Passcode Modal) -->
+    <div class="garden-modal-overlay hidden" id="passcode-modal" style="z-index: 1400; background-color: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
+      <div class="garden-modal-sheet" style="position: relative; bottom: auto; left: auto; right: auto; height: auto; max-height: 480px; width: 90%; max-width: 320px; display: flex; flex-direction: column; border-radius: var(--radius-lg);">
+        <header class="garden-modal-header" style="border-bottom: none; padding-bottom: 0;">
+          <span class="modal-date-title" id="passcode-modal-title" style="color: var(--color-text-main); font-weight: 700;">🔐 加密備份設定</span>
+          <button class="btn-close-modal" id="btn-close-passcode-modal">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        
+        <div class="garden-modal-body" style="padding: var(--space-xl) var(--space-xxl) var(--space-3xl) var(--space-xxl); text-align: left; flex: 1; box-sizing: border-box;">
+          <p id="passcode-modal-description" style="font-size: var(--font-size-sm); color: var(--color-text-sub); line-height: 1.5; margin-top: 0; margin-bottom: var(--space-lg);">
+            請設定一個 6 位以上的密碼用來加密您的日記與隨筆。此密碼僅存在於您的記憶中，若遺失將無法復原備份資料。
+          </p>
+          
+          <label style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: var(--space-xxs);">請輸入備份密碼：</label>
+          <input type="password" id="passcode-input" placeholder="請輸入密碼..." style="width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-xs) var(--space-md); font-size: var(--font-size-lg); outline: none; margin-bottom: var(--space-xxl); background-color: var(--color-card-bg); color: var(--color-text-main); box-sizing: border-box;">
+          
+          <div style="display: flex; gap: var(--space-sm);">
+            <button class="btn-partner-action" id="btn-cancel-passcode" style="flex: 1; padding: 10px 0; background: none; border: 1px solid var(--color-border); font-size: var(--font-size-base); border-radius: var(--radius-pill); cursor: pointer;">取消</button>
+            <button class="btn-save-pill" id="btn-confirm-passcode" style="flex: 1; padding: 10px 0; background-color: var(--color-text-main); border: none; color: white; font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer;">確定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="garden-modal-overlay hidden" id="completion-modal" style="z-index: 1400; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;">
+      <div class="garden-modal-sheet" style="position: relative; bottom: auto; left: auto; right: auto; height: auto; max-height: 520px; width: 90%; max-width: 340px; display: flex; flex-direction: column; border-radius: var(--radius-lg);">
+        <header class="garden-modal-header" style="border-bottom: none; text-align: center; padding-bottom: 0;">
+          <span class="modal-date-title" style="color: var(--color-mood-green); font-weight: 700; font-size: var(--font-size-3xl); text-align: center; width: 100%;">旅程已完成</span>
+        </header>
+        
+        <div class="garden-modal-body" style="padding: var(--space-sm) var(--space-xxl) var(--space-3xl) var(--space-xxl); text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box;">
+          <p style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs);">
+            Your three-year journey is complete.
+          </p>
+          <p style="font-size: var(--font-size-base); color: var(--color-text-sub); line-height: 1.5; margin-bottom: var(--space-3xl);">
+            您的三年日記旅程已圓滿完成！請選擇您想如何保存這些珍貴記憶：
+          </p>
+          
+          <div style="display: flex; flex-direction: column; gap: var(--space-md); width: 100%; box-sizing: border-box;">
+            <!-- 選項一 -->
+            <button class="btn-save-pill" id="btn-completion-opt1" style="background-color: rgba(231, 111, 81, 0.05); color: var(--color-mood-red); border: 1px solid rgba(231, 111, 81, 0.2); padding: 12px 0; font-weight: 700; font-size: var(--font-size-md); border-radius: var(--radius-pill); cursor: pointer; width: 100%; box-sizing: border-box;">
+              選項一：匯出日記並刪除帳號 (重來)
+            </button>
+            
+            <!-- 選項二 -->
+            <button class="btn-save-pill" id="btn-completion-opt2" style="background-color: var(--color-primary-light); color: var(--color-text-main); border: 1px solid var(--color-border); padding: 12px 0; font-weight: 700; font-size: var(--font-size-md); border-radius: var(--radius-pill); cursor: pointer; width: 100%; box-sizing: border-box;">
+              選項二：封存日記並開啟新三年週期
+            </button>
+
+            <!-- 暫時關閉/略過 -->
+            <button id="btn-close-completion" style="background: none; border: none; color: var(--color-text-sub); font-size: var(--font-size-xs); cursor: pointer; margin-top: var(--space-xs); text-decoration: underline;">
+              稍後再說
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 歷史回顧隨筆抽屜 (Slide-up Drawer for Review Memos) -->
+    <div class="memo-drawer hidden" id="review-memo-drawer">
+       <div class="memo-drawer-overlay" id="review-memo-drawer-overlay"></div>
+       <div class="memo-drawer-content" style="height: 86%;">
+         <div class="memo-drawer-handle" id="btn-close-review-memo" title="收起隨筆"></div>
+         
+         <div class="memo-drawer-scroll" style="padding: var(--space-xl) var(--space-xl) 30px var(--space-xl);">
+           <h3 class="drawer-section-title" id="review-memo-title" style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main);">隨筆</h3>
+           <div class="memo-timeline" id="review-memo-timeline-list" style="margin-top: var(--space-md); border-top: none;">
+             <!-- JS 動態寫入隨筆項目 -->
+           </div>
+         </div>
+       </div>
+    </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="utils.js?v=6"></script>
+  <script src="crypto-service.js?v=6"></script>
+  <script src="export-service.js?v=6"></script>
+  <script src="db.js?v=6"></script>
+  <script src="app.js?v=6"></script>
+  
+  <!-- 測試套件 (僅在網址包含 ?run-tests=true 時動態載入與執行) -->
+  <script>
+    if (new URLSearchParams(window.location.search).has('run-tests')) {
+      const script = document.createElement('script');
+      script.src = 'browser-tests.js?v=' + Date.now();
+      script.type = 'module';
+      document.body.appendChild(script);
+    }
+
+    // PWA Service Worker 註冊
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker 註冊成功，範圍：', reg.scope))
+          .catch(err => console.error('Service Worker 註冊失敗：', err));
+      });
+    }
+  </script>
+</body>
+</html>
