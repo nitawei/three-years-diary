@@ -21,7 +21,7 @@
   <div class="device-frame">
     <!-- 角色模擬切換器與設定 (右上角置放) -->
     <div class="profile-switcher-container" style="position: absolute; right: var(--space-xxl); top: 38px; z-index: 99; display: flex; align-items: center; gap: var(--space-xs);">
-      <select id="profile-switcher" style="background-color: rgba(255, 255, 255, 0.9); border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 2px var(--space-sm); font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); cursor: pointer; outline: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 24px; display: inline-flex; align-items: center; transition: var(--transition-normal);">
+      <select id="profile-switcher" style="display: none;">
         <option value="user_a">我 (User A)</option>
         <option value="user_b">筆友 (User B)</option>
       </select>
@@ -85,6 +85,9 @@
               </svg>
               Continue with Apple
             </button>
+            <div style="margin-top: var(--space-xs); font-family: 'Outfit', sans-serif; font-size: var(--font-size-xs); color: var(--color-text-sub); line-height: 1.4; text-align: center;">
+              💡 本地離線版：Google/Apple 登入為模擬帳號，所有日記資料將完全安全地儲存於本機瀏覽器（IndexedDB）中，無須擔心隱私外洩。
+            </div>
           </div>
         </div>
       </div>
@@ -458,7 +461,7 @@
            </div>
 
           <!-- 開發者測試工具 -->
-          <div style="border-top: 1px dashed var(--color-border); padding-top: var(--space-xl); text-align: left; width: 100%; box-sizing: border-box;">
+          <div style="display: none;">
             <h3 style="font-size: var(--font-size-base); font-weight: 700; color: var(--color-text-sub); margin-bottom: var(--space-xs); text-align: left;">開發者調試工具</h3>
             <button class="btn-partner-action" id="btn-dev-trigger-completion" style="background-color: rgba(138, 154, 134, 0.05); border: 1px solid rgba(138, 154, 134, 0.2); color: var(--color-mood-green); width: 100%; padding: 10px 0; font-size: var(--font-size-sm); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; box-sizing: border-box; text-align: center;">
               [開發者測試] 模擬三年期滿總結

@@ -2049,6 +2049,9 @@ async function handleDeleteMemo(id) {
 
 // 1. 若資料庫是空的，預載一些過往模擬資料以顯示美麗的彩色花園
 async function seedMockDataIfNeeded() {
+  // 生產環境發布版：不載入任何模擬資料，資料庫預設保持完全空白
+  return;
+  
   const count = await DiaryDB.getCompletedDiariesCount(State.currentUser);
   if (localStorage.getItem('diary_mock_populated') && count > 0) return;
   
