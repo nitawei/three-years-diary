@@ -97,10 +97,9 @@
     <div class="app-container hidden" id="onboarding-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px var(--space-3xl); box-sizing: border-box; text-align: left; background-color: #FAF6F0;">
       <div style="max-width: 320px; width: 100%; display: flex; flex-direction: column;">
         <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 700; color: var(--color-text-main); margin: 0 0 var(--space-xs) 0;">Welcome</h2>
-        <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin: 0 0 var(--space-5xl) 0; line-height: 1.5;">開啟您的三年時光隨筆旅程。請告訴我們如何稱呼您：</p>
+        <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin: 0 0 var(--space-5xl) 0; line-height: 1.5;">開啟您的三年交換日記，請告訴我們如何稱呼您：</p>
         
         <div style="margin-bottom: var(--space-3xl); position: relative;">
-          <label style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: var(--space-xs);">What should we call you?</label>
           <input type="text" id="onboarding-name-input" maxlength="20" placeholder="請輸入暱稱..." style="width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: var(--space-md) var(--space-xxl); font-size: var(--font-size-xl); outline: none; background-color: var(--color-card-bg); color: var(--color-text-main); box-sizing: border-box;">
           
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding: 0 var(--space-xs);">
@@ -119,11 +118,9 @@
       
       <!-- 頁面頂部日期區 -->
       <header class="page-header" style="position: relative; display: flex; flex-direction: column;">
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-          <h1 class="header-title">TODAY</h1>
-          <span id="sync-status-indicator" style="font-family: 'Outfit', sans-serif; font-size: var(--font-size-xxs); font-weight: 700; padding: 2px var(--space-sm); border-radius: var(--radius-pill); background-color: rgba(138, 154, 134, 0.15); color: var(--color-mood-green); transition: var(--transition-normal);">已同步</span>
-        </div>
+        <h1 class="header-title">TODAY</h1>
         <p class="header-subtitle">2026.07.15</p>
+        <span id="sync-status-indicator" style="position: absolute; right: 20px; bottom: 24px; font-family: 'Outfit', sans-serif; font-size: var(--font-size-xxs); font-weight: 700; padding: 2px var(--space-sm); border-radius: var(--radius-pill); background-color: rgba(138, 154, 134, 0.15); color: var(--color-mood-green); transition: var(--transition-normal);">已同步</span>
       </header>
 
       <!-- 每日備份提醒橫幅 (Daily Backup Reminder Banner) -->
@@ -424,8 +421,7 @@
                  </div>
                </div>
                <div style="font-size: var(--font-size-sm); color: var(--color-text-sub); line-height: 1.4; text-align: left;">
-                 登入方式：<span id="settings-provider-span" style="font-weight: 700;">-</span><br>
-                 帳號信箱：<span id="settings-email-span">-</span>
+                 帳號類型：<span id="settings-provider-span" style="font-weight: 700;">-</span>
                </div>
              </div>
              <button class="btn-partner-action" id="btn-logout" style="width: 100%; padding: var(--space-xs) 0; background-color: rgba(0,0,0,0.03); border: 1px solid var(--color-border); color: var(--color-text-main); font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; text-align: center;">
@@ -433,16 +429,8 @@
              </button>
            </div>
 
-           <!-- 2. 已封存的日記 -->
-           <div style="border-bottom: 1px dashed var(--color-border); padding-bottom: var(--space-xl); margin-bottom: var(--space-xxl); text-align: left; width: 100%; box-sizing: border-box;">
-             <h3 style="font-size: var(--font-size-xl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">已封存的日記</h3>
-             <div id="archived-diaries-list" class="empty-state">
-               無已封存的日記。
-             </div>
-           </div>
-
-           <!-- 3. 資料管理 -->
-           <div style="text-align: left; margin-bottom: var(--space-xxl);">
+           <!-- 2. 資料管理 -->
+           <div style="text-align: left; margin-bottom: var(--space-xxl); border-bottom: 1px dashed var(--color-border); padding-bottom: var(--space-xl); width: 100%; box-sizing: border-box;">
              <h3 style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">資料管理</h3>
              <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin-bottom: var(--space-lg); line-height: 1.5; text-align: left;">匯出您的所有日記備份，或永久刪除您的個人帳號資料。</p>
              
@@ -458,6 +446,14 @@
                </button>
              </div>
              <input type="file" id="backup-file-input" accept=".json" style="display: none;">
+           </div>
+
+           <!-- 3. 已封存的日記 -->
+           <div style="text-align: left; margin-bottom: var(--space-xxl); width: 100%; box-sizing: border-box;">
+             <h3 style="font-size: var(--font-size-xl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">已封存的日記</h3>
+             <div id="archived-diaries-list" class="empty-state">
+               無已封存的日記。
+             </div>
            </div>
 
           <!-- 開發者測試工具 -->

@@ -212,8 +212,23 @@ async function handleRouting() {
       return;
     }
 
-    if (window.location.hash !== '#login') {
+    if (window.location.hash !== '#login' && window.location.hash !== '#onboarding') {
       window.location.hash = 'login';
+      return;
+    }
+    
+    if (window.location.hash === '#onboarding') {
+      if (indicators) indicators.style.display = 'none';
+      if (switcher) switcher.style.display = 'none';
+      
+      if (splashPage) splashPage.classList.add('hidden');
+      if (loginPage) loginPage.classList.add('hidden');
+      if (onboardingPage) onboardingPage.classList.remove('hidden');
+      if (todayPage) todayPage.classList.add('hidden');
+      if (weeklyPage) weeklyPage.classList.add('hidden');
+      if (gardenPage) gardenPage.classList.add('hidden');
+      if (partnerPage) partnerPage.classList.add('hidden');
+      setupOnboardingInput();
       return;
     }
     
@@ -397,7 +412,7 @@ function updateSettingsProfileUI(user) {
     nameInput.value = user.displayName || '';
     if (counter) counter.textContent = `${(user.displayName || '').length} / 10`;
   }
-  if (providerSpan) providerSpan.textContent = user.provider === 'google' ? 'Google' : 'Apple';
+  if (providerSpan) providerSpan.textContent = user.provider === 'google' ? 'Google' : (user.provider === 'apple' ? 'Apple' : '本機帳號');
   if (emailSpan) emailSpan.textContent = user.email || '-';
   
   const handleInput = () => {
@@ -1752,17 +1767,21 @@ function setupEventListeners() {
         return;
       }
       
-      const session = getSession();
-      if (!session) return;
+      const displayName = rawVal.trim();
+      // 使用暱稱作為帳號登入 (產生唯一的英數字 ID)
+      const userId = 'user_' + encodeURIComponent(displayName).replace(/%/g, '').toLowerCase().substring(0, 16);
+      
+      // 直接設定本機登入 session
+      setSession(userId, `${userId}@local.diary`, 'local');
       
       const startYear = new Date(State.activeDate).getFullYear();
       
       // 建立 User Profile
       const newUser = {
-        id: session.userId,
-        displayName: rawVal.trim(),
-        email: session.user.email,
-        provider: session.user.provider,
+        id: userId,
+        displayName: displayName,
+        email: `${userId}@local.diary`,
+        provider: 'local',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         startedAt: State.activeDate
@@ -1782,6 +1801,8 @@ function setupEventListeners() {
       if (confirm('確定要登出您的時光日記帳號嗎？')) {
         clearSession();
         State.splashDismissed = false; // Reset splash screen so it triggers on next launch
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal) settingsModal.classList.add('hidden');
         window.location.hash = 'splash';
       }
     });
@@ -1802,9 +1823,9 @@ function setupEventListeners() {
   const loginOptionsModal = document.getElementById('login-options-modal');
   const btnCloseLoginModal = document.getElementById('btn-close-login-modal');
 
-  if (btnLoginTrigger && loginOptionsModal) {
+  if (btnLoginTrigger) {
     btnLoginTrigger.addEventListener('click', () => {
-      loginOptionsModal.classList.remove('hidden');
+      window.location.hash = 'onboarding';
     });
   }
 
