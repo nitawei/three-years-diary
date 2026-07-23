@@ -122,6 +122,37 @@ window.addEventListener('offline', () => {
   SyncManager.updateStatusUI();
 });
 
+// ==================== AirPods-style Mood Notification Toast ====================
+let airpodsToastTimeout = null;
+
+function showAirpodsToast(mood, title) {
+  const toast = document.getElementById('airpods-toast');
+  const dot = document.getElementById('airpods-toast-dot');
+  const text = document.getElementById('airpods-toast-text');
+  
+  if (!toast || !dot || !text) return;
+  
+  const colors = {
+    black: '#4a4a4a',
+    yellow: '#E8C547',
+    green: '#8A9A86',
+    blue: '#70A9A1',
+    red: '#AB3B3A'
+  };
+  
+  dot.style.backgroundColor = colors[mood] || '#fff';
+  text.textContent = `今日心情：${title}`;
+  
+  toast.classList.remove('show');
+  void toast.offsetWidth; // Force layout engine reflow to restart transition
+  toast.classList.add('show');
+  
+  if (airpodsToastTimeout) clearTimeout(airpodsToastTimeout);
+  airpodsToastTimeout = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 2200);
+}
+
 // ==================== NextAuth Session 模擬 ====================
 function getSession() {
   try {
@@ -1052,6 +1083,7 @@ function setupEventListeners() {
       const target = e.currentTarget;
       target.classList.add('active');
       State.selectedMood = target.getAttribute('data-mood');
+      showAirpodsToast(State.selectedMood, target.getAttribute('title') || '普通');
 
       // 更新稿紙卡片背景氣氛
       const container = document.getElementById('manuscript-container-box');

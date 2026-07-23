@@ -988,6 +988,53 @@ body {
   background-color: #434343;
 }
 
+/* AirPods-style notification toast (slides down from Dynamic Island) */
+.airpods-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translate(-50%, 0) scale(0.85);
+  background: rgba(33, 33, 33, 0.96);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  color: #FFFFFF;
+  padding: 8px 18px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(255, 255, 255, 0.1) inset;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              top 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.2),
+              transform 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.2),
+              visibility 0.35s linear;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.airpods-toast.show {
+  opacity: 1;
+  visibility: visible;
+  top: 52px;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.airpods-toast-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
+}
+
 .story-bar:hover {
   background-color: var(--color-text-sub);
 }

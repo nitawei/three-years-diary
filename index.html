@@ -26,6 +26,11 @@
 
   <!-- App 主容器 (手機框體效果) -->
   <div class="device-frame">
+    <!-- AirPods-style Silent/Mood popover banner -->
+    <div class="airpods-toast" id="airpods-toast">
+      <span class="airpods-toast-dot" id="airpods-toast-dot"></span>
+      <span id="airpods-toast-text"></span>
+    </div>
     <!-- 角色模擬切換器與設定 (右上角置放) -->
     <div class="profile-switcher-container" style="position: absolute; right: 20px; top: 20px; z-index: 99; display: flex; align-items: center; gap: var(--space-xs);">
       <select id="profile-switcher" style="display: none;">
