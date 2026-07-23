@@ -1768,11 +1768,17 @@ function setupEventListeners() {
       }
       
       const displayName = rawVal.trim();
-      // 使用暱稱作為帳號登入 (產生唯一的英數字 ID)
-      const userId = 'user_' + encodeURIComponent(displayName).replace(/%/g, '').toLowerCase().substring(0, 16);
+      let session = getSession();
+      let userId;
       
-      // 直接設定本機登入 session
-      setSession(userId, `${userId}@local.diary`, 'local');
+      if (session) {
+        userId = session.userId;
+      } else {
+        // Fallback to nickname login if session does not exist
+        userId = 'user_' + encodeURIComponent(displayName).replace(/%/g, '').toLowerCase().substring(0, 16);
+        setSession(userId, `${userId}@local.diary`, 'local');
+        session = getSession();
+      }
       
       const startYear = new Date(State.activeDate).getFullYear();
       
@@ -1780,8 +1786,8 @@ function setupEventListeners() {
       const newUser = {
         id: userId,
         displayName: displayName,
-        email: `${userId}@local.diary`,
-        provider: 'local',
+        email: session.user.email,
+        provider: session.user.provider,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         startedAt: State.activeDate
@@ -1823,9 +1829,9 @@ function setupEventListeners() {
   const loginOptionsModal = document.getElementById('login-options-modal');
   const btnCloseLoginModal = document.getElementById('btn-close-login-modal');
 
-  if (btnLoginTrigger) {
+  if (btnLoginTrigger && loginOptionsModal) {
     btnLoginTrigger.addEventListener('click', () => {
-      window.location.hash = 'onboarding';
+      loginOptionsModal.classList.remove('hidden');
     });
   }
 

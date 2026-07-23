@@ -20,7 +20,7 @@
   <!-- App 主容器 (手機框體效果) -->
   <div class="device-frame">
     <!-- 角色模擬切換器與設定 (右上角置放) -->
-    <div class="profile-switcher-container" style="position: absolute; right: 20px; top: 12px; z-index: 99; display: flex; align-items: center; gap: var(--space-xs);">
+    <div class="profile-switcher-container" style="position: absolute; right: 20px; top: 20px; z-index: 99; display: flex; align-items: center; gap: var(--space-xs);">
       <select id="profile-switcher" style="display: none;">
         <option value="user_a">我 (User A)</option>
         <option value="user_b">筆友 (User B)</option>
@@ -35,15 +35,15 @@
       <button class="story-bar active" id="bar-today" data-page="today" title="今日書寫"></button>
       <button class="story-bar" id="bar-partner" data-page="partner" title="交換日記"></button>
     </div>
-    <!-- Splash Page UI (圖二左) -->
-    <div class="app-container" id="splash-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-3xl); box-sizing: border-box; text-align: center; background-color: #904840; cursor: pointer;">
+    <!-- Splash Page UI (圖二left) -->
+    <div class="app-container" id="splash-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: var(--space-3xl); box-sizing: border-box; text-align: center; background-color: #904840; cursor: pointer;">
       <div class="splash-center-card" style="width: 180px; height: 180px; background-color: var(--color-bg); display: flex; align-items: center; justify-content: center; border-radius: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.15); box-sizing: border-box; padding: var(--space-sm);">
         <img src="logo_pattern_transparent.png" alt="1095 Logo" style="width: 100%; height: 100%; object-fit: contain;">
       </div>
     </div>
 
-    <!-- Login Page UI (圖二右) -->
-    <div class="app-container hidden" id="login-page" style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; min-height: 100vh; padding: 80px var(--space-3xl) 80px var(--space-3xl); box-sizing: border-box; text-align: center; background-color: var(--color-bg);">
+    <!-- Login Page UI (圖二right) -->
+    <div class="app-container hidden" id="login-page" style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; padding: 80px var(--space-3xl) 80px var(--space-3xl); box-sizing: border-box; text-align: center; background-color: var(--color-bg);">
       <div style="width: 100%; display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center;">
         <!-- Logo image displayed directly on background -->
         <img src="logo_pattern_transparent.png" alt="1095 Logo" style="width: 160px; height: 160px; object-fit: contain; margin-bottom: 50px;">
@@ -92,7 +92,7 @@
       </div>
     </div>
 
-    <div class="app-container hidden" id="onboarding-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px var(--space-3xl); box-sizing: border-box; text-align: left; background-color: #FCFAF2;">
+    <div class="app-container hidden" id="onboarding-page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 40px var(--space-3xl); box-sizing: border-box; text-align: left; background-color: #FCFAF2;">
       <div style="max-width: 320px; width: 100%; display: flex; flex-direction: column;">
         <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 700; color: var(--color-text-main); margin: 0 0 var(--space-xs) 0;">Welcome</h2>
         <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin: 0 0 var(--space-5xl) 0; line-height: 1.5;">開啟您的三年交換日記，請告訴我們如何稱呼您：</p>

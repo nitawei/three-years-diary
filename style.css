@@ -960,7 +960,7 @@ body {
 /* Top Story indicators (IG style navigation - shrunken above title) */
 .app-story-indicators {
   position: absolute;
-  top: 16px;
+  top: 33px;
   left: 0;
   width: 100%;
   display: flex;
