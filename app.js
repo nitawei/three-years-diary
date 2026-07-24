@@ -1764,7 +1764,6 @@ function setupEventListeners() {
 
   // === 登入與 Onboarding 事件監聽 ===
   const btnLoginGoogle = document.getElementById('btn-login-google');
-  const btnLoginApple = document.getElementById('btn-login-apple');
   const btnOnboardingSubmit = document.getElementById('btn-onboarding-submit');
   const btnLogout = document.getElementById('btn-logout');
 
@@ -1772,19 +1771,41 @@ function setupEventListeners() {
     btnLoginGoogle.addEventListener('click', async () => {
       const loginOptionsModal = document.getElementById('login-options-modal');
       if (loginOptionsModal) loginOptionsModal.classList.add('hidden');
-      // 模擬 Google OAuth 登入：將其映射到 user_a (為保持一致的 Mock 帳號與配對能力)
-      setSession('user_a', 'user.google@gmail.com', 'google');
-      await handleRouting();
-    });
-  }
-
-  if (btnLoginApple) {
-    btnLoginApple.addEventListener('click', async () => {
-      const loginOptionsModal = document.getElementById('login-options-modal');
-      if (loginOptionsModal) loginOptionsModal.classList.add('hidden');
-      // 模擬 Apple OAuth 登入：映射到 user_b
-      setSession('user_b', 'user.apple@privaterelay.appleid.com', 'apple');
-      await handleRouting();
+      
+      if (window.auth && typeof firebase !== 'undefined') {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+          try {
+            await window.auth.signInWithPopup(provider);
+          } catch (popupErr) {
+            if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+              console.warn("[Firebase Auth] Popup blocked, trying redirect flow...");
+              await window.auth.signInWithRedirect(provider);
+              return;
+            }
+            throw popupErr;
+          }
+        } catch (e) {
+          console.warn("[Firebase Auth] Google Auth failed, checking environment:", e);
+          
+          const isSandboxEnv = (window.location.hostname === '127.0.0.1' && window.location.port !== '8080') || 
+                               new URLSearchParams(window.location.search).has('run-tests');
+                               
+          if (isSandboxEnv && (e.code === 'auth/unauthorized-domain' || e.code === 'auth/operation-not-allowed' || e.message.includes('domain') || e.message.includes('auth'))) {
+            console.log("[Firebase Auth] Sandbox context detected. Initiating Development Sandbox Account...");
+            if (window.loginSandboxUser) {
+              await window.loginSandboxUser();
+            }
+          } else {
+            console.error("Google Auth login failure:", e);
+            alert("登入失敗，請稍候重試：" + (e.message || e.code || e));
+          }
+        }
+      } else {
+        // Fallback to original mock login behavior if offline/unloaded
+        setSession('user_a', 'user.google@gmail.com', 'google');
+        await handleRouting();
+      }
     });
   }
 

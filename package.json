@@ -1,0 +1,7 @@
+{
+  "name": "three-year-diary",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "mkdir -p dist && cp -r index.html app.js sw.js style.css utils.js db.js crypto-service.js export-service.js firebase-init.js firebase-sync.js manifest.json favicon.png apple-touch-icon.png og-image.png logo_pattern_transparent.png logo_pattern.png paper_texture.jpg icons dist/"
+  }
+}
