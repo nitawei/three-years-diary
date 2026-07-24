@@ -348,7 +348,7 @@ body {
 }
 
 /* Stretchy hidden input overlay */
-#diary-textarea {
+#diary-textarea, #edit-diary-textarea {
   position: absolute;
   top: 0;
   left: 0;
