@@ -2538,10 +2538,11 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
   const modal = document.getElementById('garden-detail-modal');
   const dateText = document.getElementById('modal-date-text');
   const deleteBtn = document.getElementById('modal-btn-delete-diary');
+  const editBtn = document.getElementById('modal-btn-edit-diary');
   const notebookText = document.getElementById('modal-notebook-text');
   const notebookMeta = document.getElementById('modal-notebook-meta');
   
-  if (!modal || !dateText || !deleteBtn || !notebookText || !notebookMeta) return;
+  if (!modal || !dateText || !deleteBtn || !editBtn || !notebookText || !notebookMeta) return;
 
   // 格式化日期顯示
   dateText.textContent = dateStr.replace(/-/g, '.');
@@ -2566,78 +2567,72 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
     
     // 綁定刪除/編輯日記點擊事件
     if (diary) {
+      editBtn.classList.remove('hidden');
       deleteBtn.classList.remove('hidden');
       
-      if (isCurrentWeekReview || isDateInCurrentWeek(dateStr)) {
-        // 若本週有日記 -> 刪除字樣改為編輯，點擊可直接編輯日記
-        deleteBtn.textContent = '編輯';
-        deleteBtn.style.color = '#434343';
-        deleteBtn.style.backgroundColor = 'rgba(67, 67, 67, 0.05)';
+      editBtn.onclick = () => {
+        modal.classList.add('hidden');
+        openEditDiaryDrawer(dateStr);
+      };
+      
+      deleteBtn.onclick = async () => {
+        if (!confirm(`確定要永久刪除 ${formattedDate} 的日記記錄嗎？\n(注意：刪除日記也會同時刪除隨筆)`)) return;
         
-        deleteBtn.onclick = async () => {
-          modal.classList.add('hidden');
-          await switchToPage('today', dateStr);
-        };
-      } else {
-        // 歷史週或 Yearly 熱力圖點點擊 -> 顯示為「刪除」，紅色樣式
-        deleteBtn.textContent = '刪除';
-        deleteBtn.style.color = 'var(--color-text-red)';
-        deleteBtn.style.backgroundColor = 'rgba(231, 111, 81, 0.05)';
-        
-        deleteBtn.onclick = async () => {
-          if (!confirm(`確定要永久刪除 ${formattedDate} 的日記記錄嗎？\n(注意：刪除日記也會同時刪除隨筆)`)) return;
+        try {
+          // 從資料庫移除
+          await DiaryDB.deleteDiary(dateStr, State.currentUser);
           
-          try {
-            // 從資料庫移除
-            await DiaryDB.deleteDiary(dateStr, State.currentUser);
+          // 關閉 Modal
+          modal.classList.add('hidden');
+          
+          // 重新整理頁面
+          await initGarden();
+          await renderWeeklyReview();
+          
+          // 如果被刪除的是今天，立刻清空今日書寫卡片狀態
+          if (dateStr === State.activeDate) {
+            const textarea = document.getElementById('diary-textarea');
+            if (textarea) textarea.value = '';
             
-            // 關閉 Modal
-            modal.classList.add('hidden');
+            State.diaryWordCount = 0;
+            const wordCountSpan = document.getElementById('diary-word-count');
+            if (wordCountSpan) wordCountSpan.textContent = '0 / 50';
             
-            // 重新整理 Yearly 網格
-            await initGarden();
+            updateManuscriptCells('');
+            removeManuscriptCursor();
             
-            // 如果被刪除的是今天 (2026-07-15)，立刻清空今日書寫卡片狀態
-            if (dateStr === State.activeDate) {
-              const textarea = document.getElementById('diary-textarea');
-              if (textarea) textarea.value = '';
-              
-              State.diaryWordCount = 0;
-              const wordCountSpan = document.getElementById('diary-word-count');
-              if (wordCountSpan) wordCountSpan.textContent = '0 / 50';
-              
-              updateManuscriptCells('');
-              removeManuscriptCursor();
-              
-              // 恢復預設心情普通 (black)
-              State.selectedMood = 'black';
-              document.querySelectorAll('.mood-dots-row .mood-dot').forEach(d => {
-                if (d.getAttribute('data-mood') === 'black') {
-                  d.classList.add('active');
-                } else {
-                  d.classList.remove('active');
-                }
-              });
-              const container = document.getElementById('manuscript-container-box');
-              if (container) {
-                container.className = 'manuscript-container mood-black';
+            // 恢復預設心情普通 (black)
+            State.selectedMood = 'black';
+            document.querySelectorAll('.mood-dots-row .mood-dot').forEach(d => {
+              if (d.getAttribute('data-mood') === 'black') {
+                d.classList.add('active');
+              } else {
+                d.classList.remove('active');
               }
+            });
+            const container = document.getElementById('manuscript-container-box');
+            if (container) {
+              container.className = 'manuscript-container mood-black';
             }
-            
-            // 清理草稿與寫入同步佇列
-            localStorage.removeItem(`draft_diary_${State.currentUser}_${dateStr}`);
-            localStorage.removeItem(`draft_mood_${State.currentUser}_${dateStr}`);
-            SyncManager.addToQueue('delete_diary', { date: dateStr });
-            
-            alert('日記已成功刪除。');
-          } catch (delErr) {
-            console.error('刪除日記失敗:', delErr);
-            alert('刪除日記失敗，請重試。');
           }
-        };
-      }
+          
+          // 清理草稿與寫入同步佇列
+          localStorage.removeItem(`draft_diary_${State.currentUser}_${dateStr}`);
+          localStorage.removeItem(`draft_mood_${State.currentUser}_${dateStr}`);
+          SyncManager.addToQueue('delete_diary', { date: dateStr });
+          
+          await updateGardenDotsColor();
+          await checkThreeYearCompletion();
+          
+          window.showToast('日記已成功刪除。');
+        } catch (delErr) {
+          console.error('刪除日記失敗:', delErr);
+          alert('刪除日記失敗，請重試。');
+        }
+      };
     } else {
-      // 若該日無日記，隱藏刪除按鈕
+      // 若該日無日記，隱藏刪除與編輯按鈕
+      editBtn.classList.add('hidden');
       deleteBtn.classList.add('hidden');
     }
     
@@ -2920,6 +2915,11 @@ function createDiaryReviewCard(dateStr, diary) {
   dateLabel.className = 'diary-review-card-date';
   dateLabel.textContent = `${formattedDate} (${weekdayStr})${isTodayStr}`;
   
+  const rightGroup = document.createElement('div');
+  rightGroup.style.display = 'flex';
+  rightGroup.style.alignItems = 'center';
+  rightGroup.style.gap = '8px';
+
   const moodDot = document.createElement('div');
   moodDot.className = 'diary-review-card-mood-dot';
   
@@ -2928,8 +2928,58 @@ function createDiaryReviewCard(dateStr, diary) {
   const moodColor = (mood === 'none') ? '#e5e5ea' : (MOOD_COLORS[mood] ? MOOD_COLORS[mood].text : '#c7c7cc');
   moodDot.style.backgroundColor = moodColor;
   
+  // 個別日記刪除按鈕 (垃圾桶)
+  if (diary && diary.content.trim()) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+    `;
+    deleteBtn.style.background = 'none';
+    deleteBtn.style.border = 'none';
+    deleteBtn.style.color = 'var(--color-text-red)';
+    deleteBtn.style.cursor = 'pointer';
+    deleteBtn.style.padding = '4px';
+    deleteBtn.style.display = 'flex';
+    deleteBtn.style.alignItems = 'center';
+    deleteBtn.style.justifyContent = 'center';
+    deleteBtn.style.borderRadius = '50%';
+    deleteBtn.style.backgroundColor = 'rgba(231, 111, 81, 0.05)';
+    deleteBtn.title = '刪除此日記';
+    
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // 阻止卡片點擊事件
+      const dateParts = dateStr.split('-');
+      const formattedDate = `${dateParts[0]} 年 ${dateParts[1]} 月 ${dateParts[2]} 日`;
+      if (!confirm(`確定要永久刪除 ${formattedDate} 的日記記錄嗎？\n(注意：刪除日記也會同時刪除隨筆)`)) return;
+      
+      try {
+        await DiaryDB.deleteDiary(dateStr, State.currentUser);
+        SyncManager.addToQueue('delete_diary', { date: dateStr });
+        
+        if (dateStr === State.activeDate) {
+          const textarea = document.getElementById('diary-textarea');
+          if (textarea) textarea.value = '';
+          State.diaryWordCount = 0;
+          const countSpan = document.getElementById('diary-word-count');
+          if (countSpan) countSpan.textContent = '0 / 50';
+          updateManuscriptCells('');
+          const mainContainer = document.getElementById('manuscript-container-box');
+          if (mainContainer) mainContainer.className = 'manuscript-container mood-black';
+        }
+        await updateGardenDotsColor();
+        await renderWeeklyReview();
+        await checkThreeYearCompletion();
+        window.showToast('日記已刪除');
+      } catch (err) {
+        console.error('刪除失敗:', err);
+      }
+    });
+    rightGroup.appendChild(deleteBtn);
+  }
+  
+  rightGroup.appendChild(moodDot);
   header.appendChild(dateLabel);
-  header.appendChild(moodDot);
+  header.appendChild(rightGroup);
   card.appendChild(header);
   
   // 卡片內容
@@ -2950,18 +3000,11 @@ function createDiaryReviewCard(dateStr, diary) {
   
   // 點擊事件交互處理
   card.addEventListener('click', async () => {
-    if (State.weeklyOffset === 0) {
-      // 當週點選 Weekly 頁面的日記卡片時
-      if (diary && diary.content.trim()) {
-        // 若本週有日記 -> 顯示橫線筆記，刪除字樣改為編輯
-        await showGardenDetailModal(dateStr, true);
-      } else {
-        // 若本週無日記 -> 跳轉Today頁面
-        await switchToPage('today', dateStr);
-      }
+    if (diary && diary.content.trim()) {
+      await showGardenDetailModal(dateStr);
     } else {
-      // 歷史週：直接跳出橫線筆記本對照彈窗，且不對 Yearly 頁面做任何動作
-      await showGardenDetailModal(dateStr, false);
+      // 無日記，點擊直接打開編輯抽屜
+      openEditDiaryDrawer(dateStr);
     }
   });
   
@@ -3707,6 +3750,216 @@ function generateExportHTMLForArchive(archive) {
   return html;
 }
 
+// === 歷史日記編輯抽屜 (Edit Diary Drawer) 邏輯 ===
+let isEditDiaryDrawerInitialized = false;
+let editTargetDate = null;
+let editSelectedMood = 'black';
+
+function initEditDiaryManuscriptGrid() {
+  const grid = document.getElementById('edit-manuscript-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (let i = 0; i < 50; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'manuscript-cell';
+    cell.setAttribute('data-index', i);
+    grid.appendChild(cell);
+  }
+}
+
+function updateEditManuscriptCells(text) {
+  const cells = document.querySelectorAll('#edit-manuscript-grid .manuscript-cell');
+  const trimmed = text.slice(0, 50);
+  cells.forEach((cell, idx) => {
+    if (idx < trimmed.length) {
+      cell.textContent = trimmed[idx];
+      cell.classList.add('has-char');
+    } else {
+      cell.textContent = '';
+      cell.classList.remove('has-char');
+    }
+  });
+}
+
+function highlightEditManuscriptCursor() {
+  removeEditManuscriptCursor();
+  const textarea = document.getElementById('edit-diary-textarea');
+  if (!textarea) return;
+  const caretPos = textarea.selectionStart;
+  const targetIdx = Math.min(caretPos, 49);
+  const cell = document.querySelector(`#edit-manuscript-grid .manuscript-cell[data-index="${targetIdx}"]`);
+  if (cell) {
+    cell.classList.add('active-cursor');
+  }
+}
+
+function removeEditManuscriptCursor() {
+  document.querySelectorAll('#edit-manuscript-grid .manuscript-cell').forEach(c => {
+    c.classList.remove('active-cursor');
+  });
+}
+
+async function openEditDiaryDrawer(dateStr) {
+  editTargetDate = dateStr;
+  
+  const drawer = document.getElementById('edit-diary-drawer');
+  const title = document.getElementById('edit-diary-drawer-title');
+  const subtitle = document.getElementById('edit-diary-subtitle');
+  const textarea = document.getElementById('edit-diary-textarea');
+  const wordCount = document.getElementById('edit-diary-word-count');
+  const container = document.getElementById('edit-manuscript-container-box');
+  
+  if (!drawer || !textarea) return;
+  
+  // 1. 初始化網格 (如果還沒初始化過)
+  const grid = document.getElementById('edit-manuscript-grid');
+  if (grid && grid.children.length === 0) {
+    initEditDiaryManuscriptGrid();
+  }
+  
+  // 2. 設定標題日期
+  if (title) {
+    title.textContent = `編輯日記 · ${dateStr.replace(/-/g, '.')}`;
+  }
+  
+  // 3. 載入當天日記
+  const diary = await DiaryDB.getDiary(dateStr, State.currentUser);
+  const content = diary ? diary.content : '';
+  editSelectedMood = diary ? diary.mood : 'black';
+  
+  textarea.value = content;
+  if (wordCount) {
+    wordCount.textContent = `${content.length} / 50`;
+  }
+  
+  // 4. 更新格線文字與心情容器顏色
+  updateEditManuscriptCells(content);
+  if (container) {
+    container.className = `manuscript-container mood-${editSelectedMood}`;
+  }
+  
+  // 5. 更新心情按鈕 active 樣式
+  document.querySelectorAll('#edit-diary-drawer .mood-dots-row .mood-dot').forEach(dot => {
+    const isSelected = dot.getAttribute('data-mood') === editSelectedMood;
+    dot.classList.toggle('active', isSelected);
+  });
+  
+  // 6. 顯示抽屜
+  drawer.classList.remove('hidden');
+  
+  // 7. 綁定事件監聽 (單次)
+  if (!isEditDiaryDrawerInitialized) {
+    const btnClose = document.getElementById('btn-close-edit-diary');
+    const overlay = document.getElementById('edit-diary-drawer-overlay');
+    const btnSave = document.getElementById('btn-save-edit-diary');
+    
+    if (btnClose) {
+      btnClose.addEventListener('click', () => drawer.classList.add('hidden'));
+    }
+    if (overlay) {
+      overlay.addEventListener('click', () => drawer.classList.add('hidden'));
+    }
+    
+    // 網格點擊聚焦
+    if (grid) {
+      grid.addEventListener('click', () => textarea.focus());
+    }
+    
+    // 輸入監聽
+    textarea.addEventListener('input', (e) => {
+      const text = e.target.value;
+      if (wordCount) wordCount.textContent = `${text.length} / 50`;
+      updateEditManuscriptCells(text);
+      highlightEditManuscriptCursor();
+    });
+    
+    textarea.addEventListener('focus', highlightEditManuscriptCursor);
+    textarea.addEventListener('keyup', highlightEditManuscriptCursor);
+    textarea.addEventListener('blur', removeEditManuscriptCursor);
+    
+    document.addEventListener('selectionchange', () => {
+      if (document.activeElement === textarea) {
+        highlightEditManuscriptCursor();
+      }
+    });
+    
+    // 心情點選監聽
+    document.querySelectorAll('#edit-diary-drawer .mood-dots-row .mood-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        editSelectedMood = dot.getAttribute('data-mood') || 'black';
+        document.querySelectorAll('#edit-diary-drawer .mood-dots-row .mood-dot').forEach(d => {
+          d.classList.toggle('active', d === dot);
+        });
+        if (container) {
+          container.className = `manuscript-container mood-${editSelectedMood}`;
+        }
+      });
+    });
+    
+    // 儲存按鈕點選
+    if (btnSave) {
+      btnSave.addEventListener('click', async () => {
+        const text = textarea.value.trim();
+        if (!text) {
+          alert('請先填寫日記內容。');
+          return;
+        }
+        
+        try {
+          // 儲存到 IndexedDB
+          await DiaryDB.saveDiary({
+            date: editTargetDate,
+            content: textarea.value,
+            mood: editSelectedMood,
+            timestamp: new Date().toISOString()
+          }, State.currentUser);
+          
+          // 同步到 Firebase
+          SyncManager.addToQueue('save_diary', {
+            date: editTargetDate,
+            content: textarea.value,
+            mood: editSelectedMood
+          });
+          
+          // 如果編輯的是 TODAY 的當前日期，則同步更新今日頁面輸入框的狀態
+          if (editTargetDate === State.activeDate) {
+            const mainTextarea = document.getElementById('diary-textarea');
+            if (mainTextarea) {
+              mainTextarea.value = textarea.value;
+              State.diaryWordCount = textarea.value.length;
+              document.getElementById('diary-word-count').textContent = `${State.diaryWordCount} / 50`;
+              updateManuscriptCells(textarea.value);
+            }
+            const mainContainer = document.getElementById('manuscript-container-box');
+            if (mainContainer) {
+              mainContainer.className = `manuscript-container mood-${editSelectedMood}`;
+            }
+            State.selectedMood = editSelectedMood;
+            document.querySelectorAll('.mood-dots-row .mood-dot').forEach(d => {
+              d.classList.toggle('active', d.getAttribute('data-mood') === editSelectedMood);
+            });
+          }
+          
+          // 關閉抽屜
+          drawer.classList.add('hidden');
+          
+          // 重新載入對應頁面內容
+          await updateGardenDotsColor();
+          await renderWeeklyReview();
+          await checkThreeYearCompletion();
+          
+          window.showToast('日記已儲存');
+        } catch (err) {
+          console.error('保存失敗:', err);
+          alert('日記儲存失敗：' + (err ? err.message : '未知錯誤'));
+        }
+      });
+    }
+    
+    isEditDiaryDrawerInitialized = true;
+  }
+}
+
 window.State = State;
 window.PartnerService = PartnerService;
 window.isDateInCurrentWeek = isDateInCurrentWeek;
@@ -3714,3 +3967,4 @@ window.generateExportHTML = generateExportHTML;
 window.encryptData = encryptData;
 window.decryptData = decryptData;
 window.validateDisplayName = validateDisplayName;
+window.openEditDiaryDrawer = openEditDiaryDrawer;

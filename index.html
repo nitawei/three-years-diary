@@ -385,10 +385,13 @@
         <div class="garden-modal-body">
           <!-- 該日記書寫卡片（橫線筆記樣式） -->
           <div class="card notebook-card">
-            <div class="card-header" style="padding-bottom: 8px;">
-            <span class="section-title">日記</span>
-            <button class="modal-btn-delete" id="modal-btn-delete-diary">刪除</button>
-          </div>
+            <div class="card-header" style="padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <span class="section-title">日記</span>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="modal-btn-delete" id="modal-btn-edit-diary" style="color: var(--color-text-main);">編輯</button>
+                <button class="modal-btn-delete" id="modal-btn-delete-diary">刪除</button>
+              </div>
+            </div>
             <div class="notebook-lines-container">
               <p id="modal-notebook-text" class="lined-notebook-diary">
                 <!-- JS 動態寫入文字 -->
@@ -606,6 +609,49 @@
            </div>
          </div>
        </div>
+  </div>
+
+  <!-- 歷史日記編輯抽屜 (Slide-up Drawer for editing past diaries) -->
+  <div class="memo-drawer hidden" id="edit-diary-drawer" style="z-index: 1250;">
+    <div class="memo-drawer-overlay" id="edit-diary-drawer-overlay"></div>
+    <div class="memo-drawer-content" style="height: 86%;">
+      <div class="memo-drawer-handle" id="btn-close-edit-diary" title="收起編輯"></div>
+      <div class="memo-drawer-scroll" style="padding: var(--space-xl) var(--space-xl) 30px var(--space-xl); display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+        
+        <h3 class="drawer-section-title" id="edit-diary-drawer-title" style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-md); text-align: left;">編輯日記</h3>
+        
+        <!-- 日記編輯主要卡片 -->
+        <div class="card diary-editor-card" style="box-shadow: none; border: 1px solid var(--color-border); margin-bottom: var(--space-lg); display: flex; flex-direction: column;">
+          <div class="card-header" style="border-bottom: none; padding-bottom: 0;">
+            <span class="section-title" id="edit-diary-subtitle" style="font-size: var(--font-size-base); color: var(--color-text-sub);">日記字句</span>
+            <span id="edit-diary-word-count" style="font-size: var(--font-size-sm); color: var(--color-text-sub); font-family: monospace;">0 / 50</span>
+          </div>
+          
+          <div class="manuscript-container" id="edit-manuscript-container-box" style="margin: var(--space-md) 0 var(--space-lg) 0;">
+            <textarea id="edit-diary-textarea" maxlength="50" placeholder="寫下這天的心情與回憶..."></textarea>
+            <div id="edit-manuscript-grid" class="manuscript-grid"></div>
+          </div>
+          
+          <div style="border-top: 1px solid var(--color-border); padding-top: var(--space-md); text-align: left;">
+            <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: var(--space-sm);">心情氣泡</span>
+            <div class="mood-selector">
+              <div class="mood-dots-row">
+                <button class="mood-dot dot-charcoal active" data-mood="black" title="普通"></button>
+                <button class="mood-dot dot-gold" data-mood="yellow" title="喜悅"></button>
+                <button class="mood-dot dot-sage" data-mood="green" title="平靜"></button>
+                <button class="mood-dot dot-sky" data-mood="blue" title="孤單"></button>
+                <button class="mood-dot dot-coral" data-mood="red" title="波瀾"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <button class="btn-save-pill" id="btn-save-edit-diary" style="width: 100%; padding: 12px 0; background-color: var(--color-text-main); border: none; color: white; font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; text-align: center; margin-top: var(--space-xs);">
+          儲存日記
+        </button>
+        
+      </div>
+    </div>
   </div>
 
   <!-- Firebase Compatibility SDK -->
