@@ -2859,7 +2859,8 @@ async function renderWeeklyReview() {
   
   // 計算本週 7 天的日期序列（降冪排列）
   const dates = [];
-  const baseDate = new Date(2026, 6, 15); // 模擬今天
+  const [ty, tm, td] = TODAY_DATE_STR.split('-').map(Number);
+  const baseDate = new Date(ty, tm - 1, td);
   baseDate.setDate(baseDate.getDate() + (State.weeklyOffset * 7));
   
   for (let i = 0; i < 7; i++) {
