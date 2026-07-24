@@ -88,6 +88,23 @@
         }
       } catch (err) {
         console.error("[Firebase Auth] Error fetching user profile:", err);
+        try {
+          const localUser = await DiaryDB.getUser(user.uid);
+          if (localUser && localUser.displayName) {
+            console.log("[Firebase Auth] Graceful fallback: local user found, redirecting to today");
+            if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash') {
+              window.location.hash = 'today';
+            } else {
+              await window.loadTodayData();
+            }
+          } else {
+            console.log("[Firebase Auth] Graceful fallback: no local user, redirecting to onboarding");
+            window.location.hash = 'onboarding';
+          }
+        } catch (localErr) {
+          console.error("[Firebase Auth] Local fallback failed:", localErr);
+          window.location.hash = 'onboarding';
+        }
       }
     } else {
       console.log("[Firebase Auth] User logged out.");
