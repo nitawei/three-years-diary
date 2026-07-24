@@ -936,7 +936,7 @@
       btnSecurityTrigger.parentNode.replaceChild(newBtn, btnSecurityTrigger);
       newBtn.addEventListener('click', () => {
         securityInfo.classList.remove('hidden');
-        const fullText = "🛡️ 隱私與安全政策：您的日記資料完全屬於您。寫作內容會以 AES-256 加密存儲於您本地的瀏覽器（IndexedDB）中；當您登入時，資料會經由安全加密協定，同步至您個人 Google 帳號綁定的私人 Firestore 資料庫中做為備份。";
+        const fullText = "🛡️ 隱私與安全政策：您的日記資料完全屬於您。寫作內容會以 AES-256 加密存儲於您本地的瀏覽器中；當您登入時，資料會經由安全加密協定，備份至您個人 Google 帳號綁定的私人雲端資料庫。";
         
         if (typingTimer) clearInterval(typingTimer);
         securityText.textContent = "";
