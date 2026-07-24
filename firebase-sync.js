@@ -1,5 +1,7 @@
 // firebase-sync.js - Firebase integration layer for time travel diary vanilla app
 (function() {
+  const TODAY_DATE_STR = (new Date(Date.now() - new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+
   // Clear any existing mock offline sessions on startup to force users to sign in with Google
   try {
     const sessionStr = localStorage.getItem('next_auth_session');
@@ -60,12 +62,12 @@
             provider: 'google',
             createdAt: profile.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            startedAt: profile.startedAt || '2026-07-15'
+            startedAt: profile.startedAt || TODAY_DATE_STR
           });
 
-          const startYear = new Date(profile.startedAt || '2026-07-15').getFullYear();
+          const startYear = new Date(profile.startedAt || TODAY_DATE_STR).getFullYear();
           localStorage.setItem(`cycle_start_year_${user.uid}`, String(startYear));
-          localStorage.setItem(`cycle_start_date_${user.uid}`, profile.startedAt || '2026-07-15');
+          localStorage.setItem(`cycle_start_date_${user.uid}`, profile.startedAt || TODAY_DATE_STR);
 
           // Download all diaries and memos from Firestore for this user
           await syncAllFromFirestore(user.uid);
@@ -397,7 +399,8 @@
     
     // 計算本週 7 天的日期序列（降冪排列）
     const dates = [];
-    const baseDate = new Date(2026, 6, 15); // 模擬今天
+    const [ty, tm, td] = TODAY_DATE_STR.split('-').map(Number);
+    const baseDate = new Date(ty, tm - 1, td);
     baseDate.setDate(baseDate.getDate() + (State.weeklyOffset * 7));
     
     for (let i = 0; i < 7; i++) {
@@ -654,14 +657,10 @@
     });
 
     card.addEventListener('click', async () => {
-      if (State.weeklyOffset === 0) {
-        if (diary && diary.content && diary.content.trim()) {
-          await showGardenDetailModal(dateStr, true);
-        } else {
-          await switchToPage('today', dateStr);
-        }
-      } else {
-        await showGardenDetailModal(dateStr, false);
+      if (diary && diary.content && diary.content.trim()) {
+        await showGardenDetailModal(dateStr);
+      } else if (isOwner) {
+        window.openEditDiaryDrawer(dateStr);
       }
     });
 
@@ -687,11 +686,11 @@
           provider: 'google',
           createdAt: profile.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          startedAt: profile.startedAt || '2026-07-15'
+          startedAt: profile.startedAt || TODAY_DATE_STR
         });
-        const startYear = new Date(profile.startedAt || '2026-07-15').getFullYear();
+        const startYear = new Date(profile.startedAt || TODAY_DATE_STR).getFullYear();
         localStorage.setItem(`cycle_start_year_${mockUid}`, String(startYear));
-        localStorage.setItem(`cycle_start_date_${mockUid}`, profile.startedAt || '2026-07-15');
+        localStorage.setItem(`cycle_start_date_${mockUid}`, profile.startedAt || TODAY_DATE_STR);
         await syncAllFromFirestore(mockUid);
         startPartnerInfoListener(mockUid);
         window.location.hash = 'today';
