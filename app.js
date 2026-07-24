@@ -30,12 +30,14 @@ window.alert = function(msg) {
   window.showToast(msg, isError ? 'error' : 'success');
 };
 
+const TODAY_DATE_STR = (new Date(Date.now() - new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+
 const State = {
   selectedMood: 'black',
   diaryWordCount: 0,
   uploadedImages: [], // 儲存當前正在新增/編輯的備忘錄圖片 (Base64)
   editingMemoId: null, // 當前正在編輯的備忘錄 ID，null 表示新增模式
-  activeDate: '2026-07-15', // 模擬今天日期
+  activeDate: TODAY_DATE_STR, // 自動獲取今天日期
   weeklyOffset: 0, // 週記回顧的週數偏移量 (0:當週, -1:上一週...)
   currentUser: 'user_a', // 當前登入用戶 (模擬 User A / User B)
   splashDismissed: false
@@ -745,7 +747,7 @@ async function loadTodayData() {
     }
     const todaySectionTitle = document.querySelector('#today-page .section-title');
     if (todaySectionTitle) {
-      todaySectionTitle.textContent = (State.activeDate === '2026-07-15') ? '書寫今日' : '編輯日記';
+      todaySectionTitle.textContent = (State.activeDate === TODAY_DATE_STR) ? '書寫今日' : '編輯日記';
     }
 
     // A. 載入今日日記
@@ -1542,7 +1544,7 @@ function setupEventListeners() {
       if (customDate) {
         State.activeDate = customDate;
       } else {
-        State.activeDate = '2026-07-15';
+        State.activeDate = TODAY_DATE_STR;
       }
       await loadTodayData();
     } else if (pageName === 'weekly') {
@@ -2520,9 +2522,9 @@ function triggerGardenBloomAnimation() {
 }
 
 // 5. 點擊小點，開啟詳細對照彈窗並渲染資料
-// 檢查日期是否在本週 (今天為 2026-07-15 往前推 7 天，即 2026-07-09 到 2026-07-15)
+// 檢查日期是否在本週
 function isDateInCurrentWeek(dateStr) {
-  const [ty, tm, td] = '2026-07-15'.split('-').map(Number);
+  const [ty, tm, td] = TODAY_DATE_STR.split('-').map(Number);
   const today = new Date(ty, tm - 1, td);
   const [dy, dm, dd] = dateStr.split('-').map(Number);
   const dateVal = new Date(dy, dm - 1, dd);
@@ -2907,7 +2909,7 @@ function createDiaryReviewCard(dateStr, diary) {
   const weekdayStr = getChineseWeekday(dateStr);
   
   // 判斷是否為今天
-  const isTodayStr = (dateStr === '2026-07-15') ? ' · 今天' : '';
+  const isTodayStr = (dateStr === TODAY_DATE_STR) ? ' · 今天' : '';
   
   // 卡片標頭
   const header = document.createElement('div');
