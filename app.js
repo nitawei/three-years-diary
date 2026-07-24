@@ -1910,7 +1910,7 @@ function setupEventListeners() {
   if (btnSecurityTrigger && securityInfo && securityText) {
     btnSecurityTrigger.addEventListener('click', () => {
       securityInfo.classList.remove('hidden');
-      const fullText = "您的日記與隨筆資料預設將完全保存在本地資料庫（IndexedDB/LocalStorage fallback）中。未經您的授權與主動加密備份，任何人均無法存取您的內容。";
+      const fullText = "🛡️ 隱私與安全政策：您的日記資料完全屬於您。寫作內容會以 AES-256 加密存儲於您本地的瀏覽器中；當您登入時，資料會經由安全加密協定，備份至您個人 Google 帳號綁定的私人雲端資料庫。";
       
       if (typingTimer) clearInterval(typingTimer);
       securityText.textContent = "";
