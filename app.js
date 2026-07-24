@@ -1300,28 +1300,35 @@ function setupEventListeners() {
   if (btnConfirmExportDelete && deleteConfirmModal && deleteConfirmPassword) {
     btnConfirmExportDelete.addEventListener('click', async () => {
       const password = deleteConfirmPassword.value.trim();
-      if (password !== '123456') {
-        alert('密碼輸入錯誤，請輸入 123456 作為模擬驗證密碼。');
+      if (password !== 'delete') {
+        alert('請輸入 delete 以確認刪除。');
         return;
       }
 
       // 1. 生成備份網頁
       const exportHtml = await generateExportHTML(State.currentUser);
 
-      // 2. 開啟列印視窗
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('請允許此網頁開啟彈出視窗以完成備份匯出。');
-        return;
-      }
-      printWindow.document.write(exportHtml);
-      printWindow.document.close();
-      printWindow.focus();
-
-      // 預留些許時間給瀏覽器渲染
+      // 2. 開啟列印視窗 (採用隱藏 iframe 以避免被瀏覽器阻擋彈出視窗)
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.width = '0px';
+      iframe.style.height = '0px';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+      
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(exportHtml);
+      doc.close();
+      
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      
       setTimeout(() => {
-        printWindow.print();
-      }, 600);
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
 
       // 3. 執行資料永久刪除事務 (Security deletion transaction)
       await DiaryDB.deleteUser(State.currentUser);
