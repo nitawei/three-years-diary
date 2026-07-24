@@ -172,8 +172,10 @@ body {
 }
 
 #splash-page {
-  background-image: none !important;
+  background-image: url('paper_texture.jpg') !important;
   background-color: #904840 !important;
+  background-blend-mode: multiply;
+  background-size: cover;
 }
 
 .page-header {
