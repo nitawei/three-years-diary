@@ -448,40 +448,34 @@
 
     // 遍歷日期渲染各個日記卡片
     for (const dateStr of dates) {
-      const dayRow = document.createElement('div');
-      dayRow.className = 'weekly-day-row';
-      dayRow.style.display = 'flex';
-      dayRow.style.flexDirection = 'column';
-      dayRow.style.gap = '12px';
-      dayRow.style.marginBottom = '24px';
-      dayRow.style.borderBottom = '1px solid var(--color-border)';
-      dayRow.style.paddingBottom = '24px';
+      if (partnerId) {
+        // 如果有筆友，以天為單位進行分組容器渲染，以確保版面整齊
+        const dayRow = document.createElement('div');
+        dayRow.className = 'weekly-day-row';
+        dayRow.style.display = 'flex';
+        dayRow.style.flexDirection = 'column';
+        dayRow.style.gap = '12px';
+        dayRow.style.marginBottom = '24px';
+        dayRow.style.borderBottom = '1px solid var(--color-border)';
+        dayRow.style.paddingBottom = '24px';
 
-      const dayHeader = document.createElement('div');
-      dayHeader.style.fontSize = '0.86rem';
-      dayHeader.style.fontWeight = '700';
-      dayHeader.style.color = 'var(--color-text-sub)';
-      dayHeader.style.paddingBottom = '4px';
-      dayHeader.style.textAlign = 'left';
-      
-      const weekdayStr = getChineseWeekday(dateStr);
-      const isTodayStr = (dateStr === State.activeDate) ? ' · 今天' : '';
-      dayHeader.textContent = `📅 ${dateStr.replace(/-/g, '.')} (${weekdayStr})${isTodayStr}`;
-      dayRow.appendChild(dayHeader);
+        // Render Owner Card
+        const ownDiary = await DiaryDB.getDiary(dateStr, State.currentUser);
+        const ownCard = await createWeeklyReviewCard(dateStr, ownDiary, State.currentUser, '我的日記', true);
+        dayRow.appendChild(ownCard);
 
-      // Render Owner Notebook Card
-      const ownDiary = await DiaryDB.getDiary(dateStr, State.currentUser);
-      const ownCard = await createWeeklyNotebookCard(dateStr, ownDiary, State.currentUser, '我的日記', true);
-      dayRow.appendChild(ownCard);
-
-      // Render Partner Notebook Card if connected and date >= connection date
-      if (partnerId && currentConnectedAt && dateStr >= currentConnectedAt.slice(0, 10)) {
+        // Render Partner Card
         const partnerDiary = await DiaryDB.getDiary(dateStr, partnerId);
-        const partnerCard = await createWeeklyNotebookCard(dateStr, partnerDiary, partnerId, `${partnerName}的日記`, false);
+        const partnerCard = await createWeeklyReviewCard(dateStr, partnerDiary, partnerId, `${partnerName}的日記`, false);
         dayRow.appendChild(partnerCard);
-      }
 
-      reviewList.appendChild(dayRow);
+        reviewList.appendChild(dayRow);
+      } else {
+        // 如果沒有筆友，直接渲染單一 card 並加入列表，重現 100% 原始單人排版
+        const ownDiary = await DiaryDB.getDiary(dateStr, State.currentUser);
+        const ownCard = await createWeeklyReviewCard(dateStr, ownDiary, State.currentUser, '我的日記', true);
+        reviewList.appendChild(ownCard);
+      }
     }
     
     // 重新渲染 Lucide 圖標
@@ -490,197 +484,119 @@
     } catch (e) {}
   };
 
-  async function createWeeklyNotebookCard(dateStr, diary, userId, title, isOwner) {
+  async function createWeeklyReviewCard(dateStr, diary, userId, title, isOwner) {
     const card = document.createElement('div');
-    card.className = 'card notebook-card';
-    card.style.boxShadow = 'none';
-    card.style.border = '1px solid var(--color-border)';
-    card.style.textAlign = 'left';
-
+    card.className = 'diary-review-card';
+    
+    // 格式化日期與星期
+    const parts = dateStr.split('-');
+    const formattedDate = `${parts[0]}.${parts[1]}.${parts[2]}`;
+    const weekdayStr = getChineseWeekday(dateStr);
+    const isTodayStr = (dateStr === TODAY_DATE_STR) ? ' · 今天' : '';
+    
+    // 卡片標頭
     const header = document.createElement('div');
-    header.className = 'card-header';
-    header.style.paddingBottom = '8px';
-    header.style.display = 'flex';
-    header.style.justifyContent = 'space-between';
-    header.style.alignItems = 'center';
-
-    const titleSpan = document.createElement('span');
-    titleSpan.className = 'section-title';
-    titleSpan.style.fontSize = '0.82rem';
-    titleSpan.style.color = 'var(--color-text-sub)';
-    titleSpan.style.fontWeight = '600';
-    titleSpan.textContent = title;
-    header.appendChild(titleSpan);
-
-    const rightActions = document.createElement('div');
-    rightActions.style.display = 'flex';
-    rightActions.style.alignItems = 'center';
-    rightActions.style.gap = '8px';
-
-    if (isOwner && diary && diary.content && diary.content.trim()) {
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'modal-btn-delete';
-      deleteBtn.style.color = 'var(--color-text-red)';
-      deleteBtn.style.backgroundColor = 'rgba(231, 111, 81, 0.05)';
-      deleteBtn.style.border = 'none';
-      deleteBtn.style.borderRadius = 'var(--radius-pill)';
-      deleteBtn.style.padding = '2px 10px';
-      deleteBtn.style.fontSize = '0.72rem';
-      deleteBtn.style.fontWeight = '600';
-      deleteBtn.style.cursor = 'pointer';
-      deleteBtn.textContent = '刪除';
-      deleteBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const parts = dateStr.split('-');
-        const formattedDate = `${parts[0]} 年 ${parts[1]} 月 ${parts[2]} 日`;
-        if (!confirm(`確定要永久刪除 ${formattedDate} 的日記記錄嗎？\n(注意：刪除日記也會同時刪除隨筆)`)) return;
-        try {
-          await DiaryDB.deleteDiary(dateStr, userId);
-          SyncManager.addToQueue('delete_diary', { date: dateStr });
-          alert('日記已成功刪除。');
-          await window.renderWeeklyReview();
-        } catch (err) {
-          alert('刪除失敗。');
-        }
-      });
-      rightActions.appendChild(deleteBtn);
-    }
-
+    header.className = 'diary-review-card-header';
+    
+    const dateLabel = document.createElement('span');
+    dateLabel.className = 'diary-review-card-date';
+    const partnerId = window.PartnerService.getPartnerId(State.currentUser);
+    const labelSuffix = partnerId ? ` · ${title}` : '';
+    dateLabel.textContent = `${formattedDate} (${weekdayStr})${isTodayStr}${labelSuffix}`;
+    
+    const rightGroup = document.createElement('div');
+    rightGroup.style.display = 'flex';
+    rightGroup.style.alignItems = 'center';
+    rightGroup.style.gap = '8px';
+    
     const moodDot = document.createElement('div');
     moodDot.className = 'diary-review-card-mood-dot';
     const mood = diary ? diary.mood : 'none';
     const colors = MOOD_COLORS[mood] || { text: '#434343', line: 'rgba(67, 67, 67, 0.4)' };
-    moodDot.style.backgroundColor = (mood === 'none') ? '#e5e5ea' : colors.text;
-    moodDot.style.width = '8px';
-    moodDot.style.height = '8px';
-    moodDot.style.borderRadius = '50%';
-    rightActions.appendChild(moodDot);
-
-    header.appendChild(rightActions);
-    card.appendChild(header);
-
-    const linesContainer = document.createElement('div');
-    linesContainer.className = 'notebook-lines-container';
-
-    const bodyText = document.createElement('p');
-    bodyText.className = 'lined-notebook-diary';
-    bodyText.style.fontSize = '1.12rem';
-    bodyText.style.lineHeight = '1.9';
-
-    if (diary && diary.content && diary.content.trim()) {
-      bodyText.textContent = diary.content;
-      bodyText.style.setProperty('--mood-color', colors.text);
-      bodyText.style.setProperty('--mood-color-line', colors.line);
-    } else {
-      bodyText.textContent = '今天沒有寫下任何日記字句。';
-      bodyText.style.setProperty('--mood-color', '#c7c7cc');
-      bodyText.style.setProperty('--mood-color-line', 'rgba(199, 199, 204, 0.4)');
-    }
-    linesContainer.appendChild(bodyText);
-    card.appendChild(linesContainer);
-
-    const footer = document.createElement('div');
-    footer.style.display = 'flex';
-    footer.style.justifyContent = 'flex-end';
-    footer.style.alignItems = 'center';
-    footer.style.marginTop = '14px';
-
-    const memoToggleBtn = document.createElement('button');
-    memoToggleBtn.style.background = 'none';
-    memoToggleBtn.style.border = '1px solid var(--color-border)';
-    memoToggleBtn.style.borderRadius = '50%';
-    memoToggleBtn.style.width = '22px';
-    memoToggleBtn.style.height = '22px';
-    memoToggleBtn.style.display = 'inline-flex';
-    memoToggleBtn.style.alignItems = 'center';
-    memoToggleBtn.style.justifyContent = 'center';
-    memoToggleBtn.style.fontSize = '0.86rem';
-    memoToggleBtn.style.fontWeight = '600';
-    memoToggleBtn.style.color = 'var(--color-text-sub)';
-    memoToggleBtn.style.cursor = 'pointer';
-    memoToggleBtn.style.padding = '0';
-    memoToggleBtn.style.lineHeight = '1';
-    memoToggleBtn.title = '閱讀隨筆';
-    memoToggleBtn.textContent = '＋';
-
-    footer.appendChild(memoToggleBtn);
-    card.appendChild(footer);
-
-    const memosContainer = document.createElement('div');
-    memosContainer.style.display = 'none';
-    memosContainer.style.marginTop = '8px';
-    memosContainer.style.borderTop = '1px dashed var(--color-border)';
-    memosContainer.style.paddingTop = '8px';
-
-    const memosLabel = document.createElement('div');
-    memosLabel.style.fontSize = '0.75rem';
-    memosLabel.style.fontWeight = '700';
-    memosLabel.style.color = 'var(--color-text-sub)';
-    memosLabel.style.marginBottom = '6px';
-    memosLabel.textContent = '隨筆：';
-    memosContainer.appendChild(memosLabel);
-
-    const memosListDiv = document.createElement('div');
-    memosContainer.appendChild(memosListDiv);
-    card.appendChild(memosContainer);
-
-    let isMemosLoaded = false;
-
-    memoToggleBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (memosContainer.style.display === 'none') {
-        memoToggleBtn.textContent = '−';
-        memosContainer.style.display = 'block';
-
-        if (!isMemosLoaded) {
-          memosListDiv.innerHTML = '<div style="font-size: 0.8rem; color: var(--color-text-sub);">載入中...</div>';
-          try {
-            const memos = await DiaryDB.getMemosForDate(dateStr, userId);
-            memosListDiv.innerHTML = '';
-            if (memos && memos.length > 0) {
-              memos.forEach(memo => {
-                const memoItem = document.createElement('div');
-                memoItem.className = 'timeline-item';
-                memoItem.style.fontSize = '0.82rem';
-                memoItem.style.padding = '6px 10px';
-                memoItem.style.backgroundColor = 'rgba(0,0,0,0.02)';
-                memoItem.style.borderRadius = 'var(--radius-sm)';
-                memoItem.style.marginBottom = '6px';
-                
-                const timeSpan = document.createElement('span');
-                timeSpan.style.fontWeight = '700';
-                timeSpan.style.marginRight = '8px';
-                timeSpan.textContent = memo.time || '00:00';
-                memoItem.appendChild(timeSpan);
-
-                const textSpan = document.createElement('span');
-                textSpan.textContent = memo.content;
-                memoItem.appendChild(textSpan);
-
-                memosListDiv.appendChild(memoItem);
-              });
-            } else {
-              memosListDiv.innerHTML = '<div style="font-size: 0.8rem; color: var(--color-text-sub); font-style: italic;">無隨筆內容</div>';
-            }
-            isMemosLoaded = true;
-          } catch (err) {
-            memosListDiv.innerHTML = '<div style="font-size: 0.8rem; color: var(--color-text-red);">載入隨筆失敗</div>';
+    const moodColor = (mood === 'none') ? '#e5e5ea' : colors.text;
+    moodDot.style.backgroundColor = moodColor;
+    
+    // 只有本人的日記，且有日記內容時，才顯示刪除按鈕
+    if (isOwner && diary && diary.content && diary.content.trim()) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+      `;
+      deleteBtn.style.background = 'none';
+      deleteBtn.style.border = 'none';
+      deleteBtn.style.color = 'var(--color-text-red)';
+      deleteBtn.style.cursor = 'pointer';
+      deleteBtn.style.padding = '4px';
+      deleteBtn.style.display = 'flex';
+      deleteBtn.style.alignItems = 'center';
+      deleteBtn.style.justifyContent = 'center';
+      deleteBtn.style.borderRadius = '50%';
+      deleteBtn.style.backgroundColor = 'rgba(231, 111, 81, 0.05)';
+      deleteBtn.title = '刪除此日記';
+      
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // 阻止卡片點擊事件
+        const dateParts = dateStr.split('-');
+        const formattedDateText = `${dateParts[0]} 年 ${dateParts[1]} 月 ${dateParts[2]} 日`;
+        if (!confirm(`確定要永久刪除 ${formattedDateText} 的日記記錄嗎？\n(注意：刪除日記也會同時刪除隨筆)`)) return;
+        
+        try {
+          await DiaryDB.deleteDiary(dateStr, userId);
+          SyncManager.addToQueue('delete_diary', { date: dateStr });
+          
+          if (dateStr === State.activeDate) {
+            const textarea = document.getElementById('diary-textarea');
+            if (textarea) textarea.value = '';
+            State.diaryWordCount = 0;
+            const countSpan = document.getElementById('diary-word-count');
+            if (countSpan) countSpan.textContent = '0 / 50';
+            if (window.updateManuscriptCells) window.updateManuscriptCells('');
+            const mainContainer = document.getElementById('manuscript-container-box');
+            if (mainContainer) mainContainer.className = 'manuscript-container mood-black';
           }
+          if (window.updateGardenDotsColor) await window.updateGardenDotsColor();
+          await window.renderWeeklyReview();
+          if (window.checkThreeYearCompletion) await window.checkThreeYearCompletion();
+          window.showToast('日記已刪除');
+        } catch (err) {
+          console.error('刪除失敗:', err);
         }
-      } else {
-        memoToggleBtn.textContent = '＋';
-        memosContainer.style.display = 'none';
-      }
-    });
-
+      });
+      rightGroup.appendChild(deleteBtn);
+    }
+    
+    rightGroup.appendChild(moodDot);
+    header.appendChild(dateLabel);
+    header.appendChild(rightGroup);
+    card.appendChild(header);
+    
+    // 卡片內容
+    if (diary && diary.content && diary.content.trim()) {
+      const body = document.createElement('p');
+      body.className = 'diary-review-card-body';
+      body.textContent = diary.content;
+      body.style.setProperty('--mood-color', colors.text);
+      card.appendChild(body);
+    } else {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'diary-review-card-empty';
+      emptyMsg.textContent = isOwner ? '今天沒有寫下任何日記字句。' : '今天尚未寫下日記字句。';
+      card.appendChild(emptyMsg);
+    }
+    
+    // 點擊事件交互處理
     card.addEventListener('click', async () => {
       if (diary && diary.content && diary.content.trim()) {
-        await showGardenDetailModal(dateStr);
+        if (window.showGardenDetailModal) {
+          await window.showGardenDetailModal(dateStr);
+        }
       } else if (isOwner) {
-        window.openEditDiaryDrawer(dateStr);
+        if (window.openEditDiaryDrawer) {
+          window.openEditDiaryDrawer(dateStr);
+        }
       }
     });
-
+    
     return card;
   }
 
