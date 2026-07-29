@@ -1,0 +1,27 @@
+{
+  "name": "1095",
+  "short_name": "1095",
+  "description": "Everyday comes Again.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#DCC9C0",
+  "theme_color": "#DCC9C0",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
