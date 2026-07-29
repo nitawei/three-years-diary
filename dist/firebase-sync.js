@@ -443,39 +443,11 @@
       btnNext.disabled = (State.weeklyOffset === 0);
     }
     
-    const partnerId = window.PartnerService.getPartnerId(State.currentUser);
-    const partnerName = await window.getPartnerName();
-
-    // 遍歷日期渲染各個日記卡片
+    // 遍歷日期渲染各個日記卡片 (週記頁面僅保留自己的日記)
     for (const dateStr of dates) {
-      if (partnerId) {
-        // 如果有筆友，以天為單位進行分組容器渲染，以確保版面整齊
-        const dayRow = document.createElement('div');
-        dayRow.className = 'weekly-day-row';
-        dayRow.style.display = 'flex';
-        dayRow.style.flexDirection = 'column';
-        dayRow.style.gap = '12px';
-        dayRow.style.marginBottom = '24px';
-        dayRow.style.borderBottom = '1px solid var(--color-border)';
-        dayRow.style.paddingBottom = '24px';
-
-        // Render Owner Card
-        const ownDiary = await DiaryDB.getDiary(dateStr, State.currentUser);
-        const ownCard = await createWeeklyReviewCard(dateStr, ownDiary, State.currentUser, '我的日記', true);
-        dayRow.appendChild(ownCard);
-
-        // Render Partner Card
-        const partnerDiary = await DiaryDB.getDiary(dateStr, partnerId);
-        const partnerCard = await createWeeklyReviewCard(dateStr, partnerDiary, partnerId, `${partnerName}的日記`, false);
-        dayRow.appendChild(partnerCard);
-
-        reviewList.appendChild(dayRow);
-      } else {
-        // 如果沒有筆友，直接渲染單一 card 並加入列表，重現 100% 原始單人排版
-        const ownDiary = await DiaryDB.getDiary(dateStr, State.currentUser);
-        const ownCard = await createWeeklyReviewCard(dateStr, ownDiary, State.currentUser, '我的日記', true);
-        reviewList.appendChild(ownCard);
-      }
+      const ownDiary = await DiaryDB.getDiary(dateStr, State.currentUser);
+      const ownCard = await createWeeklyReviewCard(dateStr, ownDiary, State.currentUser, '我的日記', true);
+      reviewList.appendChild(ownCard);
     }
     
     // 重新渲染 Lucide 圖標
@@ -500,9 +472,7 @@
     
     const dateLabel = document.createElement('span');
     dateLabel.className = 'diary-review-card-date';
-    const partnerId = window.PartnerService.getPartnerId(State.currentUser);
-    const labelSuffix = partnerId ? ` · ${title}` : '';
-    dateLabel.textContent = `${formattedDate} (${weekdayStr})${isTodayStr}${labelSuffix}`;
+    dateLabel.textContent = `${formattedDate} (${weekdayStr})${isTodayStr}`;
     
     const rightGroup = document.createElement('div');
     rightGroup.style.display = 'flex';
