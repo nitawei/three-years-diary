@@ -560,7 +560,7 @@
         if (window.showGardenDetailModal) {
           await window.showGardenDetailModal(dateStr);
         }
-      } else if (isOwner) {
+      } else if (isOwner && window.isDateEditable && window.isDateEditable(dateStr)) {
         if (window.openEditDiaryDrawer) {
           window.openEditDiaryDrawer(dateStr);
         }
