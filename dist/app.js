@@ -2544,6 +2544,8 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
   
   if (!modal || !dateText || !deleteBtn || !editBtn || !notebookText || !notebookMeta) return;
 
+  editBtn.textContent = '編輯';
+
   // 格式化日期顯示
   dateText.textContent = dateStr.replace(/-/g, '.');
   const dateParts = dateStr.split('-');
@@ -2631,9 +2633,17 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
         }
       };
     } else {
-      // 若該日無日記，隱藏刪除與編輯按鈕
-      editBtn.classList.add('hidden');
       deleteBtn.classList.add('hidden');
+      if (isDateEditable(dateStr)) {
+        editBtn.classList.remove('hidden');
+        editBtn.textContent = '寫日記';
+        editBtn.onclick = () => {
+          modal.classList.add('hidden');
+          openEditDiaryDrawer(dateStr);
+        };
+      } else {
+        editBtn.classList.add('hidden');
+      }
     }
     
     // 渲染橫線筆記本與心情字體/底線顏色

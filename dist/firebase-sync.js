@@ -554,16 +554,9 @@
       card.appendChild(emptyMsg);
     }
     
-    // 點擊事件交互處理
     card.addEventListener('click', async () => {
-      if (diary && diary.content && diary.content.trim()) {
-        if (window.showGardenDetailModal) {
-          await window.showGardenDetailModal(dateStr);
-        }
-      } else if (isOwner && window.isDateEditable && window.isDateEditable(dateStr)) {
-        if (window.openEditDiaryDrawer) {
-          window.openEditDiaryDrawer(dateStr);
-        }
+      if (window.showGardenDetailModal) {
+        await window.showGardenDetailModal(dateStr);
       }
     });
     
