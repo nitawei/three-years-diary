@@ -270,6 +270,7 @@
   }
 
   let currentPairId = null;
+  let currentSharingStartDate = null;
 
   // Real-time Partner Info & Single Source of Truth Listener
   function startPartnerInfoListener(uid) {
@@ -290,6 +291,7 @@
             currentPartnerId = partnerId;
             currentPairId = pairId;
             currentConnectedAt = data.createdAt;
+            currentSharingStartDate = sharingStartDate;
 
             // Sync partner links in localStorage
             const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
@@ -309,6 +311,7 @@
             currentPartnerId = null;
             currentPairId = null;
             currentConnectedAt = null;
+            currentSharingStartDate = null;
 
             // Clean partner links in localStorage
             const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
@@ -559,6 +562,9 @@
   const FirebasePartnerService = {
     getPartnerId(userId) {
       return currentPartnerId;
+    },
+    getSharingStartDate(userId) {
+      return currentSharingStartDate || TODAY_DATE_STR;
     },
     async previewInviteCode(pin) {
       const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
