@@ -1796,31 +1796,41 @@ function setupEventListeners() {
       
       if (window.auth && typeof firebase !== 'undefined') {
         const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({
+          prompt: 'select_account'
+        });
+
         try {
-          try {
-            await window.auth.signInWithPopup(provider);
-          } catch (popupErr) {
-            if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
-              console.warn("[Firebase Auth] Popup blocked, trying redirect flow...");
-              await window.auth.signInWithRedirect(provider);
-              return;
-            }
-            throw popupErr;
-          }
-        } catch (e) {
-          console.warn("[Firebase Auth] Google Auth failed, checking environment:", e);
+          console.log("[Firebase Auth] Initiating Google Popup Login...");
+          await window.auth.signInWithPopup(provider);
+        } catch (popupErr) {
+          console.warn("[Firebase Auth] Primary popup login notice:", popupErr);
+          const errMsg = String(popupErr && (popupErr.message || popupErr.code || popupErr));
           
-          const isSandboxEnv = (window.location.hostname === '127.0.0.1' && window.location.port !== '8080') || 
-                               new URLSearchParams(window.location.search).has('run-tests');
-                               
-          if (isSandboxEnv && (e.code === 'auth/unauthorized-domain' || e.code === 'auth/operation-not-allowed' || e.message.includes('domain') || e.message.includes('auth'))) {
-            console.log("[Firebase Auth] Sandbox context detected. Initiating Development Sandbox Account...");
-            if (window.loginSandboxUser) {
-              await window.loginSandboxUser();
+          if (errMsg.includes('missing initial state') || popupErr.code === 'auth/missing-initial-state') {
+            console.warn("[Firebase Auth] Storage-partitioned browser environment detected. Retrying Popup Login...");
+            alert("偵測到瀏覽器開啟了隱私/無痕模式。請允許開啟彈出視窗以完成 Google 帳號登入。");
+            await window.auth.signInWithPopup(provider);
+            return;
+          }
+
+          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+            console.warn("[Firebase Auth] Popup blocked by browser, attempting redirect flow...");
+            try {
+              await window.auth.signInWithRedirect(provider);
+            } catch (redirErr) {
+              const redirMsg = String(redirErr && (redirErr.message || redirErr.code || redirErr));
+              if (redirMsg.includes('missing initial state') || redirErr.code === 'auth/missing-initial-state') {
+                alert("目前瀏覽器無痕/隱私模式阻擋了 Redirect 跨站認證。請關閉「封鎖彈出視窗」設定後重試 Google 登入。");
+              } else {
+                throw redirErr;
+              }
             }
-          } else {
-            console.error("Google Auth login failure:", e);
-            alert("登入失敗，請稍候重試：" + (e.message || e.code || e));
+            return;
+          }
+          
+          if (popupErr.code !== 'auth/popup-closed-by-user') {
+            throw popupErr;
           }
         }
       } else {
