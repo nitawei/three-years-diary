@@ -365,7 +365,7 @@
       });
   }
 
-  // PATH B — Partner History: Date-Specific Single Document Read with IndexedDB Cache
+  // PATH B — Partner History: Firestore Source of Truth -> Update IndexedDB Cache -> Offline Fallback
   window.getPartnerDiaryByDate = async function(partnerId, date, sharingStartDate) {
     if (!partnerId || !date || !sharingStartDate) return null;
 
@@ -375,18 +375,9 @@
       return null;
     }
 
-    // Check IndexedDB cache first (${partnerId}_${date})
+    // 1. Try Firestore get() FIRST as Source of Truth
     try {
-      const cached = await DiaryDB.getDiary(date, partnerId);
-      if (cached && cached.content) {
-        console.log(`[Partner History] Serving cached partner diary for ${date}`);
-        return cached;
-      }
-    } catch (_) {}
-
-    // On-demand single document read from Firestore: users/{partnerId}/diaries/{date}
-    try {
-      console.log(`[Partner History] Fetching single document for ${date}...`);
+      console.log(`[Partner History] Fetching latest single document from Firestore for ${date}...`);
       const docSnap = await window.db.collection('users').doc(partnerId).collection('diaries').doc(date).get();
       if (docSnap.exists) {
         const data = docSnap.data();
@@ -401,13 +392,32 @@
             mood: data.mood || 'none',
             timestamp: timestampStr
           };
+          // Save / update latest data in IndexedDB cache
           await DiaryDB.saveDiary(record, partnerId);
           return record;
+        } else {
+          // Document has empty content -> delete local cache
+          await DiaryDB.deleteDiary(date, partnerId);
+          return null;
         }
+      } else {
+        // Document does not exist in Firestore -> delete local cache
+        await DiaryDB.deleteDiary(date, partnerId);
+        return null;
       }
     } catch (err) {
-      console.error(`[Partner History] Single document read failed for ${date}:`, err);
+      console.warn(`[Partner History] Firestore get() failed / offline for ${date}, falling back to IndexedDB cache:`, err);
     }
+
+    // 2. Fallback to IndexedDB cache ONLY if Firestore read fails or device is offline
+    try {
+      const cached = await DiaryDB.getDiary(date, partnerId);
+      if (cached && cached.content) {
+        console.log(`[Partner History] Serving offline cached partner diary for ${date}`);
+        return cached;
+      }
+    } catch (_) {}
+
     return null;
   };
 
