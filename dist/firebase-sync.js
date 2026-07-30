@@ -514,24 +514,36 @@
       return currentPartnerId;
     },
     async generateInviteCode(userId) {
+      const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
+      const realAuthUid = authUser ? authUser.uid : (userId && userId !== 'user_a' && userId !== 'user_b' ? userId : null);
+      
+      if (!realAuthUid) {
+        console.error('[PARTNER AUTH ERROR] No active Firebase Auth session found for generateInviteCode!');
+        throw new Error('Must be logged in with Google/Firebase Auth.');
+      }
+
       const pin = String(Math.floor(100000 + Math.random() * 900000));
       const inviteDocPath = `invitations/${pin}`;
-      const currentAuthUid = window.auth && window.auth.currentUser ? window.auth.currentUser.uid : null;
       
-      console.log(`[PARTNER DEBUG] generateInviteCode Start:
-- currentAuthUid: ${currentAuthUid}
-- userId parameter: ${userId}
-- invitePin: ${pin}
-- inviteDocPath: ${inviteDocPath}`);
+      console.log('[AUTH DEBUG]', {
+        currentAuthUid: realAuthUid,
+        currentAuthEmail: authUser ? authUser.email : null,
+      });
+
+      console.log('[INVITE CREATE DEBUG]', {
+        authUid: realAuthUid,
+        ownerUidWritten: realAuthUid,
+        pin: pin
+      });
 
       try {
         await window.db.collection('invitations').doc(pin).set({
           invitationId: pin,
-          ownerUid: userId,
+          ownerUid: realAuthUid,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        console.log(`[PARTNER DEBUG] generateInviteCode Success for PIN: ${pin}`);
+        console.log(`[PARTNER DEBUG] generateInviteCode Success for PIN: ${pin} (ownerUid: ${realAuthUid})`);
         return pin;
       } catch (err) {
         console.error(`[PARTNER DEBUG] generateInviteCode Error:
@@ -541,56 +553,62 @@
       }
     },
     async acceptInviteCode(userId, pin) {
+      const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
+      const realAuthUid = authUser ? authUser.uid : (userId && userId !== 'user_a' && userId !== 'user_b' ? userId : null);
+
+      if (!realAuthUid) {
+        console.error('[PARTNER AUTH ERROR] No active Firebase Auth session found for acceptInviteCode!');
+        alert('請先進行 Google 登入後再進行配對。');
+        return false;
+      }
+
       const inviteRef = window.db.collection('invitations').doc(pin);
-      const currentAuthUid = window.auth && window.auth.currentUser ? window.auth.currentUser.uid : null;
       
-      console.log(`[PARTNER DEBUG] acceptInviteCode Start:
-- currentAuthUid: ${currentAuthUid}
-- userId parameter: ${userId}
-- invitePin: ${pin}
-- inviteDocPath: ${inviteRef.path}`);
+      console.log('[AUTH DEBUG]', {
+        currentAuthUid: realAuthUid,
+        currentAuthEmail: authUser ? authUser.email : null,
+      });
 
       try {
         const inviteDoc = await inviteRef.get();
-        const inviteExists = inviteDoc.exists;
-        console.log(`[PARTNER DEBUG] Fetch invitation:
-- inviteExists: ${inviteExists}`);
-        
-        if (!inviteExists) {
+        if (!inviteDoc.exists) {
           console.warn(`[PARTNER DEBUG] Invitation ${pin} does not exist.`);
+          alert('驗證失敗：邀請碼不存在。');
           return false;
         }
         
         const inviteData = inviteDoc.data();
         const inviteOwnerUid = inviteData.ownerUid;
-        const sameUserCheck = (inviteOwnerUid === userId);
+        const sameUserCheck = (inviteOwnerUid === realAuthUid);
         
-        console.log(`[PARTNER DEBUG] Invitation data:
-- inviteOwnerUid: ${inviteOwnerUid}
-- currentUserUid: ${userId}
-- inviteStatus: ${inviteData.status}
-- sameUserCheck: ${sameUserCheck}`);
+        console.log('[INVITE ACCEPT DEBUG]', {
+          currentAuthUid: realAuthUid,
+          invitationOwnerUid: inviteOwnerUid,
+          invitationStatus: inviteData.status,
+          sameUserCheck: sameUserCheck
+        });
 
-        if (inviteData.status !== 'pending' || sameUserCheck) {
-          console.warn(`[PARTNER DEBUG] Validation failed: status is not pending or same user check failed.`);
+        if (sameUserCheck) {
+          console.warn(`[PARTNER DEBUG] Attempted to accept own invitation code! (${realAuthUid} === ${inviteOwnerUid})`);
+          alert('不能輸入自己所產生的邀請碼。');
+          return false;
+        }
+
+        if (inviteData.status !== 'pending') {
+          console.warn(`[PARTNER DEBUG] Invitation ${pin} status is ${inviteData.status}, not pending.`);
+          alert('此邀請碼已被使用或已失效。');
           return false;
         }
 
         const connectedAt = new Date().toISOString();
         const batch = window.db.batch();
-        
-        console.log(`[PARTNER DEBUG] Preparing batch writes:
-- invitationUpdate: status = 'accepted'
-- ownerPartnerWrite path: users/${inviteOwnerUid}/partner/info (partnerId: ${userId})
-- guestPartnerWrite path: users/${userId}/partner/info (partnerId: ${inviteOwnerUid})`);
-
         const sharingStartDate = TODAY_DATE_STR;
-        const pairId = getPairId(inviteOwnerUid, userId);
+        const pairId = getPairId(inviteOwnerUid, realAuthUid);
 
         // 1. Mark invite as accepted atomically with acceptor metadata
         batch.update(inviteRef, {
           status: 'accepted',
-          acceptedBy: userId,
+          acceptedBy: realAuthUid,
           acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
@@ -599,7 +617,7 @@
           const partnershipRef = window.db.collection('partnerships').doc(pairId);
           batch.set(partnershipRef, {
             pairId: pairId,
-            memberUids: [inviteOwnerUid, userId].sort(),
+            memberUids: [inviteOwnerUid, realAuthUid].sort(),
             status: 'active',
             sharingStartDate: sharingStartDate,
             createdAt: connectedAt,
@@ -609,7 +627,7 @@
         }
         
         // 3. Link both users 1-on-1 with pairId and explicit sharingStartDate
-        batch.set(window.db.collection('users').doc(userId).collection('partner').doc('info'), {
+        batch.set(window.db.collection('users').doc(realAuthUid).collection('partner').doc('info'), {
           partnerId: inviteOwnerUid,
           pairId: pairId,
           connectedAt: connectedAt,
@@ -617,7 +635,7 @@
         });
 
         batch.set(window.db.collection('users').doc(inviteOwnerUid).collection('partner').doc('info'), {
-          partnerId: userId,
+          partnerId: realAuthUid,
           pairId: pairId,
           connectedAt: connectedAt,
           sharingStartDate: sharingStartDate
