@@ -229,26 +229,40 @@
     if (partnerDiariesUnsubscribe) partnerDiariesUnsubscribe();
 
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
-      .onSnapshot((snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          const dateStr = change.doc.id;
-          if (dateStr >= connectedAt.slice(0, 10)) {
-            if (change.type === "removed") {
-              await DiaryDB.deleteDiary(dateStr, partnerId);
-            } else {
-              const data = change.doc.data();
-              await DiaryDB.saveDiary({
-                date: dateStr,
-                content: data.content,
-                mood: data.mood,
-                timestamp: data.updatedAt ? data.updatedAt.toDate().toISOString() : new Date().toISOString()
-              }, partnerId);
+      .onSnapshot(async (snapshot) => {
+        try {
+          const promises = snapshot.docChanges().map(async (change) => {
+            const dateStr = change.doc.id;
+            const connectedDateStr = (connectedAt && typeof connectedAt === 'string') ? connectedAt.slice(0, 10) : '2000-01-01';
+            if (dateStr >= connectedDateStr) {
+              if (change.type === "removed") {
+                await DiaryDB.deleteDiary(dateStr, partnerId);
+              } else {
+                const data = change.doc.data();
+                if (data && data.content) {
+                  let timestampStr = new Date().toISOString();
+                  if (data.updatedAt) {
+                    timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
+                  }
+                  await DiaryDB.saveDiary({
+                    date: dateStr,
+                    content: data.content,
+                    mood: data.mood || 'none',
+                    timestamp: timestampStr
+                  }, partnerId);
+                }
+              }
             }
-          }
-        });
-        // Trigger UI updates
-        window.loadTodayData();
-        window.initGarden();
+          });
+          await Promise.all(promises);
+
+          // Trigger UI updates AFTER all IndexedDB writes are complete
+          if (window.loadTodayData) await window.loadTodayData();
+          if (window.initGarden) await window.initGarden();
+          if (window.renderWeeklyReview) await window.renderWeeklyReview();
+        } catch (err) {
+          console.error("[Partner] Diaries sync failed:", err);
+        }
       });
   }
 
@@ -256,26 +270,33 @@
     if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
 
     partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos')
-      .onSnapshot((snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          const memoId = change.doc.id;
-          const data = change.doc.data();
-          if (data && data.date >= connectedAt.slice(0, 10)) {
-            if (change.type === "removed") {
-              await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
-            } else {
-              await DiaryDB.saveMemo({
-                id: Number(memoId) || memoId,
-                date: data.date,
-                time: data.time || '00:00',
-                content: data.content,
-                images: data.images || []
-              }, partnerId);
+      .onSnapshot(async (snapshot) => {
+        try {
+          const promises = snapshot.docChanges().map(async (change) => {
+            const memoId = change.doc.id;
+            const data = change.doc.data();
+            const connectedDateStr = (connectedAt && typeof connectedAt === 'string') ? connectedAt.slice(0, 10) : '2000-01-01';
+            if (data && data.date && data.date >= connectedDateStr) {
+              if (change.type === "removed") {
+                await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
+              } else {
+                await DiaryDB.saveMemo({
+                  id: Number(memoId) || memoId,
+                  date: data.date,
+                  time: data.time || '00:00',
+                  content: data.content,
+                  images: data.images || []
+                }, partnerId);
+              }
             }
-          }
-        });
-        // Trigger UI updates
-        window.loadTodayData();
+          });
+          await Promise.all(promises);
+
+          // Trigger UI updates AFTER all IndexedDB writes are complete
+          if (window.loadTodayData) await window.loadTodayData();
+        } catch (err) {
+          console.error("[Partner] Memos sync failed:", err);
+        }
       });
   }
 
