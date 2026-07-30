@@ -215,6 +215,18 @@
     }
   }
 
+  function getSharingStartDate(data) {
+    if (data && data.sharingStartDate && typeof data.sharingStartDate === 'string' && data.sharingStartDate.length >= 10) {
+      return data.sharingStartDate.slice(0, 10);
+    }
+    if (data && data.connectedAt) {
+      if (typeof data.connectedAt === 'string' && data.connectedAt.length >= 10) {
+        return data.connectedAt.slice(0, 10);
+      }
+    }
+    return '2000-01-01';
+  }
+
   // Real-time Partner Info updates listener
   function startPartnerInfoListener(uid) {
     if (partnerUnsubscribe) partnerUnsubscribe();
@@ -225,10 +237,11 @@
           const data = docSnap.data();
           const partnerId = data.partnerId;
           const connectedAt = data.connectedAt;
+          const sharingStartDate = getSharingStartDate(data);
 
           if (partnerId !== currentPartnerId) {
             console.log("[Partner] Connected with partner:", partnerId);
-            console.log('[Partner Sync] partnerId ready:', partnerId);
+            console.log('[Partner Sync] partnerId ready:', partnerId, 'sharingStartDate:', sharingStartDate);
             currentPartnerId = partnerId;
             currentConnectedAt = connectedAt;
 
@@ -238,9 +251,9 @@
             links[partnerId] = uid;
             localStorage.setItem('partner_links', JSON.stringify(links));
 
-            // Start listening to partner's updates
-            startPartnerDiariesListener(partnerId, connectedAt);
-            startPartnerMemosListener(partnerId, connectedAt);
+            // Start listening to partner's updates with explicit sharingStartDate
+            startPartnerDiariesListener(partnerId, sharingStartDate);
+            startPartnerMemosListener(partnerId, sharingStartDate);
 
             // Trigger UI refresh to transition from "尚未聯結" to "已聯結"
             console.log('[Partner Sync] triggering Today UI refresh');
@@ -267,19 +280,7 @@
       });
   }
 
-  function getLocalDateString(connectedAt) {
-    if (!connectedAt) return '2000-01-01';
-    const d = new Date(connectedAt);
-    if (isNaN(d.getTime())) {
-      return typeof connectedAt === 'string' ? connectedAt.slice(0, 10) : '2000-01-01';
-    }
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  function startPartnerDiariesListener(partnerId, connectedAt) {
+  function startPartnerDiariesListener(partnerId, sharingStartDate) {
     if (partnerDiariesUnsubscribe) partnerDiariesUnsubscribe();
 
     let isInitialSnapshot = true;
@@ -287,17 +288,18 @@
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
       .onSnapshot(async (snapshot) => {
         try {
-          const minDateStr = getLocalDateString(connectedAt);
           console.log(`[Partner Sync] Listener snapshot received for partner ${partnerId}, docs: ${snapshot.docs.length}, initial: ${isInitialSnapshot}`);
 
           if (isInitialSnapshot) {
             console.log('[Partner Sync] initial diary snapshot received');
+            const activeDocIds = new Set();
             
             // Save all active partner diaries from initial snapshot
             const savePromises = snapshot.docs.map(async (doc) => {
               const dateStr = doc.id;
               const data = doc.data();
-              if (dateStr >= minDateStr && data && data.content && data.content.trim()) {
+              if (dateStr >= sharingStartDate && data && data.content && data.content.trim()) {
+                activeDocIds.add(dateStr);
                 let timestampStr = new Date().toISOString();
                 if (data.updatedAt) {
                   timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
@@ -309,11 +311,23 @@
                   mood: data.mood || 'none',
                   timestamp: timestampStr
                 }, partnerId);
-              } else {
-                await DiaryDB.deleteDiary(dateStr, partnerId);
               }
             });
             await Promise.all(savePromises);
+
+            // Compare with local IndexedDB cached partner diaries and purge stale/deleted ones
+            try {
+              const localPartnerDiaries = await DiaryDB.getAllDiaries(partnerId);
+              for (const localRecord of localPartnerDiaries) {
+                if (!activeDocIds.has(localRecord.date)) {
+                  console.log('[Partner Sync] Purging stale local deleted partner diary:', localRecord.date);
+                  await DiaryDB.deleteDiary(localRecord.date, partnerId);
+                }
+              }
+            } catch (purgeErr) {
+              console.warn('[Partner Sync] Failed to purge stale local diaries:', purgeErr);
+            }
+
             isInitialSnapshot = false;
           } else {
             // Process subsequent docChanges cleanly without stale re-saves
@@ -324,7 +338,7 @@
                 await DiaryDB.deleteDiary(dateStr, partnerId);
               } else {
                 const data = change.doc.data();
-                if (dateStr >= minDateStr && data && data.content && data.content.trim()) {
+                if (dateStr >= sharingStartDate && data && data.content && data.content.trim()) {
                   let timestampStr = new Date().toISOString();
                   if (data.updatedAt) {
                     timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
@@ -355,18 +369,17 @@
       });
   }
 
-  function startPartnerMemosListener(partnerId, connectedAt) {
+  function startPartnerMemosListener(partnerId, sharingStartDate) {
     if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
 
     partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos')
       .onSnapshot(async (snapshot) => {
         try {
-          const minDateStr = getLocalDateString(connectedAt);
           const promises = snapshot.docChanges().map(async (change) => {
             const memoId = change.doc.id;
             const data = change.doc.data();
             if (data && data.date) {
-              if (data.date >= minDateStr) {
+              if (data.date >= sharingStartDate) {
                 if (change.type === "removed") {
                   await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
                 } else {
@@ -535,18 +548,22 @@
 - ownerPartnerWrite path: users/${inviteOwnerUid}/partner/info (partnerId: ${userId})
 - guestPartnerWrite path: users/${userId}/partner/info (partnerId: ${inviteOwnerUid})`);
 
+        const sharingStartDate = TODAY_DATE_STR;
+
         // 1. Mark invite as accepted
         batch.update(inviteRef, { status: 'accepted' });
         
-        // 2. Link both users 1-on-1
+        // 2. Link both users 1-on-1 with explicit sharingStartDate
         batch.set(window.db.collection('users').doc(userId).collection('partner').doc('info'), {
           partnerId: inviteOwnerUid,
-          connectedAt: connectedAt
+          connectedAt: connectedAt,
+          sharingStartDate: sharingStartDate
         });
 
         batch.set(window.db.collection('users').doc(inviteOwnerUid).collection('partner').doc('info'), {
           partnerId: userId,
-          connectedAt: connectedAt
+          connectedAt: connectedAt,
+          sharingStartDate: sharingStartDate
         });
 
         console.log(`[PARTNER DEBUG] Committing batch...`);
