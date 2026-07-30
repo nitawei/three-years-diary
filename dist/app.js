@@ -1066,11 +1066,20 @@ function setupEventListeners() {
       highlightManuscriptCursor();
     });
 
-    textarea.addEventListener('blur', () => {
+    textarea.addEventListener('blur', async () => {
       removeManuscriptCursor();
       const text = textarea.value ? textarea.value.trim() : '';
       if (text.length > 0) {
+        await DiaryDB.saveDiary({
+          date: State.activeDate,
+          content: textarea.value,
+          mood: State.selectedMood,
+          timestamp: new Date().toISOString()
+        }, State.currentUser);
         SyncManager.addToQueue('save_diary', { date: State.activeDate, content: textarea.value, mood: State.selectedMood });
+      } else {
+        await DiaryDB.deleteDiary(State.activeDate, State.currentUser);
+        SyncManager.addToQueue('delete_diary', { date: State.activeDate });
       }
     });
 

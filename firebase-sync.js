@@ -76,6 +76,9 @@
           // Subscribe to partner info updates
           startPartnerInfoListener(user.uid);
           
+          // Process any pending local sync items to Firestore
+          if (window.SyncManager) window.SyncManager.processQueue();
+          
           // Redirect to today if currently on login/onboarding
           if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash') {
             window.location.hash = 'today';
@@ -284,47 +287,62 @@
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
       .onSnapshot(async (snapshot) => {
         try {
+          const minDateStr = getLocalDateString(connectedAt);
+          console.log(`[Partner Sync] Listener snapshot received for partner ${partnerId}, docs: ${snapshot.docs.length}, initial: ${isInitialSnapshot}`);
+
           if (isInitialSnapshot) {
             console.log('[Partner Sync] initial diary snapshot received');
-          }
-          const minDateStr = getLocalDateString(connectedAt);
-
-          // Process full docs on initial snapshot or docChanges on subsequent updates
-          const docsToProcess = isInitialSnapshot ? snapshot.docs : snapshot.docChanges().map(c => c.doc);
-          const promises = docsToProcess.map(async (docObj) => {
-            const dateStr = docObj.id;
-            const data = typeof docObj.data === 'function' ? docObj.data() : docObj;
-            if (dateStr >= minDateStr) {
-              if (data && data.content) {
+            
+            // Save all active partner diaries from initial snapshot
+            const savePromises = snapshot.docs.map(async (doc) => {
+              const dateStr = doc.id;
+              const data = doc.data();
+              if (dateStr >= minDateStr && data && data.content && data.content.trim()) {
                 let timestampStr = new Date().toISOString();
                 if (data.updatedAt) {
                   timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
                 }
-                console.log('[Partner Sync] partner diary updated:', dateStr);
+                console.log('[Partner Sync] partner diary initial save:', dateStr);
                 await DiaryDB.saveDiary({
                   date: dateStr,
                   content: data.content,
                   mood: data.mood || 'none',
                   timestamp: timestampStr
                 }, partnerId);
-              }
-            } else {
-              // Delete any pre-pairing local partner cache
-              await DiaryDB.deleteDiary(dateStr, partnerId);
-            }
-          });
-
-          // Process removals if not initial snapshot
-          if (!isInitialSnapshot) {
-            snapshot.docChanges().forEach(change => {
-              if (change.type === "removed") {
-                promises.push(DiaryDB.deleteDiary(change.doc.id, partnerId));
+              } else {
+                await DiaryDB.deleteDiary(dateStr, partnerId);
               }
             });
+            await Promise.all(savePromises);
+            isInitialSnapshot = false;
+          } else {
+            // Process subsequent docChanges cleanly without stale re-saves
+            const changePromises = snapshot.docChanges().map(async (change) => {
+              const dateStr = change.doc.id;
+              if (change.type === 'removed') {
+                console.log('[Partner Sync] partner diary removed:', dateStr);
+                await DiaryDB.deleteDiary(dateStr, partnerId);
+              } else {
+                const data = change.doc.data();
+                if (dateStr >= minDateStr && data && data.content && data.content.trim()) {
+                  let timestampStr = new Date().toISOString();
+                  if (data.updatedAt) {
+                    timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
+                  }
+                  console.log('[Partner Sync] partner diary updated:', dateStr);
+                  await DiaryDB.saveDiary({
+                    date: dateStr,
+                    content: data.content,
+                    mood: data.mood || 'none',
+                    timestamp: timestampStr
+                  }, partnerId);
+                } else {
+                  await DiaryDB.deleteDiary(dateStr, partnerId);
+                }
+              }
+            });
+            await Promise.all(changePromises);
           }
-
-          await Promise.all(promises);
-          isInitialSnapshot = false;
 
           // Trigger UI updates AFTER all IndexedDB writes are complete
           console.log('[Partner Sync] triggering Today UI refresh');
