@@ -34,19 +34,16 @@ service cloud.firestore {
       );
     }
 
-    // 2. 對稱 Partnership Single Source of Truth 權限 (原子與 getAfter 防偽驗證)
+    // 2. 對稱 Partnership Single Source of Truth 權限
     match /partnerships/{pairId} {
       allow read: if request.auth != null && request.auth.uid in resource.data.memberUids;
       
-      // CREATE: 必須由接受者與邀請碼原子點擊觸發，經過 getAfter 嚴格驗證邀請碼已 atomic accepted
+      // CREATE: 必須由 Authenticated 成員建立，且 pairId 必須正確對應雙方 Canonical UID 排序組合
       allow create: if request.auth != null &&
         request.resource.data.memberUids.size() == 2 &&
         request.auth.uid in request.resource.data.memberUids &&
         request.resource.data.status == 'active' &&
-        pairId == getPairId(request.resource.data.memberUids[0], request.resource.data.memberUids[1]) &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.status == 'accepted' &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.acceptedBy == request.auth.uid &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid != request.auth.uid;
+        pairId == getPairId(request.resource.data.memberUids[0], request.resource.data.memberUids[1]);
 
       // UPDATE: 成員不可篡改 memberUids / sharingStartDate，僅允許 active -> disconnected 單向離線
       allow update: if request.auth != null &&
@@ -56,11 +53,20 @@ service cloud.firestore {
         resource.data.status == 'active' && request.resource.data.status == 'disconnected';
     }
     
-    // 3. 配對 Reference 權限 (僅供 UI 參考)
+    // 3. 配對 Reference 權限 (僅供 UI 快取)
     match /users/{userId}/partner/info {
-      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.uid == resource.data.partnerId);
-      allow create, update: if request.auth != null && (request.auth.uid == userId || request.auth.uid == request.resource.data.partnerId);
-      allow delete: if request.auth != null && (request.auth.uid == userId || request.auth.uid == resource.data.partnerId);
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        (resource != null && request.auth.uid == resource.data.partnerId)
+      );
+      allow create, update: if request.auth != null && (
+        request.auth.uid == userId ||
+        request.auth.uid == request.resource.data.partnerId
+      );
+      allow delete: if request.auth != null && (
+        request.auth.uid == userId ||
+        (resource != null && request.auth.uid == resource.data.partnerId)
+      );
     }
 
     // 4. 對稱日記讀取權限：直接憑據 partnerships/{pairId} 進行純粹真相檢驗
