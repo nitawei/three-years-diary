@@ -1083,10 +1083,7 @@
     const btnOnboardingSubmit = document.getElementById('btn-onboarding-submit');
     const nameInput = document.getElementById('onboarding-name-input');
     if (btnOnboardingSubmit && nameInput) {
-      const newBtn = btnOnboardingSubmit.cloneNode(true);
-      btnOnboardingSubmit.parentNode.replaceChild(newBtn, btnOnboardingSubmit);
-      
-      newBtn.addEventListener('click', async () => {
+      btnOnboardingSubmit.addEventListener('click', async () => {
         const displayName = nameInput.value.trim();
         if (!displayName) {
           alert('請輸入您的暱稱。');
@@ -1162,9 +1159,7 @@
     let currentPendingPin = null;
 
     if (btnPartnerVerifyCode && pinInput && panelInviteInput) {
-      const newBtn = btnPartnerVerifyCode.cloneNode(true);
-      btnPartnerVerifyCode.parentNode.replaceChild(newBtn, btnPartnerVerifyCode);
-      newBtn.addEventListener('click', async () => {
+      btnPartnerVerifyCode.addEventListener('click', async () => {
         const pin = pinInput.value.trim().replace(/\s/g, '');
         if (pin.length !== 6 || isNaN(pin)) {
           alert('請輸入 6 位數字邀請碼。');
@@ -1192,9 +1187,7 @@
 
     // 3.5. Confirm Accept Partner Button (Step 2: Atomic Acceptance Write)
     if (btnConfirmAccept) {
-      const newConfirmBtn = btnConfirmAccept.cloneNode(true);
-      btnConfirmAccept.parentNode.replaceChild(newConfirmBtn, btnConfirmAccept);
-      newConfirmBtn.addEventListener('click', async () => {
+      btnConfirmAccept.addEventListener('click', async () => {
         if (!currentPendingPin) {
           alert('請重新輸入邀請碼驗證。');
           return;
@@ -1218,9 +1211,7 @@
     }
 
     if (btnPreviewCancel) {
-      const newCancelBtn = btnPreviewCancel.cloneNode(true);
-      btnPreviewCancel.parentNode.replaceChild(newCancelBtn, btnPreviewCancel);
-      newCancelBtn.addEventListener('click', () => {
+      btnPreviewCancel.addEventListener('click', () => {
         currentPendingPin = null;
         if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
         if (panelUnlinked) panelUnlinked.classList.remove('hidden');
@@ -1230,9 +1221,7 @@
     // 4. Partner Unlink Button
     const btnPartnerUnlink = document.getElementById('btn-partner-unlink');
     if (btnPartnerUnlink) {
-      const newBtn = btnPartnerUnlink.cloneNode(true);
-      btnPartnerUnlink.parentNode.replaceChild(newBtn, btnPartnerUnlink);
-      newBtn.addEventListener('click', async () => {
+      btnPartnerUnlink.addEventListener('click', async () => {
         const partnerName = await getPartnerName();
         if (!confirm(`確定要解除與${partnerName}的聯結嗎？\n解除後將立即雙向撤銷今日日記的互看權限。`)) return;
 
@@ -1255,9 +1244,7 @@
     const deleteConfirmPassword = document.getElementById('delete-confirm-password');
     const deleteConfirmModal = document.getElementById('delete-confirm-modal');
     if (btnConfirmExportDelete && deleteConfirmPassword && deleteConfirmModal) {
-      const newBtn = btnConfirmExportDelete.cloneNode(true);
-      btnConfirmExportDelete.parentNode.replaceChild(newBtn, btnConfirmExportDelete);
-      newBtn.addEventListener('click', async () => {
+      btnConfirmExportDelete.addEventListener('click', async () => {
         const inputVal = deleteConfirmPassword.value.trim();
         if (inputVal !== 'delete') {
           alert('請輸入 delete 以確認刪除。');
@@ -1326,9 +1313,7 @@
     // 6. Logout Button
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) {
-      const newBtn = btnLogout.cloneNode(true);
-      btnLogout.parentNode.replaceChild(newBtn, btnLogout);
-      newBtn.addEventListener('click', async () => {
+      btnLogout.addEventListener('click', async () => {
         if (confirm('確定要登出您的時光日記帳號嗎？')) {
           try {
             await window.auth.signOut();
@@ -1349,9 +1334,7 @@
     const securityText = document.getElementById('login-security-text');
     let typingTimer = null;
     if (btnSecurityTrigger && securityInfo && securityText) {
-      const newBtn = btnSecurityTrigger.cloneNode(true);
-      btnSecurityTrigger.parentNode.replaceChild(newBtn, btnSecurityTrigger);
-      newBtn.addEventListener('click', () => {
+      btnSecurityTrigger.addEventListener('click', () => {
         securityInfo.classList.remove('hidden');
         const fullText = "🛡️ 隱私與安全政策：您的日記資料完全屬於您。寫作內容會以 AES-256 加密存儲於您本地的瀏覽器中；當您登入時，資料會經由安全加密協定，備份至您個人 Google 帳號綁定的私人雲端資料庫。";
         

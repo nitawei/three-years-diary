@@ -1489,28 +1489,8 @@ function setupEventListeners() {
     });
   }
 
-  // 驗證邀請碼
-  const btnPartnerVerifyCode = document.getElementById('btn-partner-verify-code');
-  if (btnPartnerVerifyCode && pinInput) {
-    btnPartnerVerifyCode.addEventListener('click', async () => {
-      const pin = pinInput.value.trim().replace(/\s/g, '');
-      if (pin.length !== 6 || isNaN(pin)) {
-        alert('請輸入 6 位數字邀請碼。');
-        return;
-      }
-      
-      const success = await window.PartnerService.acceptInviteCode(State.currentUser, pin);
-      if (success) {
-        const partnerName = await window.getPartnerName();
-        alert(`聯結成功！現在可以開始查看${partnerName}的今日日記。`);
-        pinInput.value = '';
-        panelInviteInput.classList.add('hidden');
-        await loadTodayData();
-      } else {
-        console.trace('[SELF INVITE BLOCKED app.js else block]');
-      }
-    });
-  }
+  // 驗證邀請碼邏輯由 firebase-sync.js (Two-step Preview & Accept) 統一處理
+  // 解除聯結與其他視圖控制保留於 app.js / firebase-sync.js 雙向相容
 
   // 解除聯結
   const btnPartnerUnlink = document.getElementById('btn-partner-unlink');
