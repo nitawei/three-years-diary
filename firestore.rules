@@ -72,21 +72,23 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // 4. 對稱日記讀取權限：直接憑據 partnerships/{pairId} 進行純粹真相檢驗
+    // 4. 對稱日記讀取權限：明確拆分 get (單文件) 與 list (集合查詢)
     match /users/{userId}/diaries/{date} {
-      allow read: if request.auth != null && (
+      allow get: if request.auth != null && (
         request.auth.uid == userId ||
         isPartnerActive(request.auth.uid, userId, date)
       );
+      allow list: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // 5. 對稱隨筆讀取權限
+    // 5. 對稱隨筆讀取權限：明確拆分 get (單文件) 與 list (集合查詢)
     match /users/{userId}/memos/{memoId} {
-      allow read: if request.auth != null && (
+      allow get: if request.auth != null && (
         request.auth.uid == userId ||
         isPartnerMemoActive(request.auth.uid, userId)
       );
+      allow list: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 

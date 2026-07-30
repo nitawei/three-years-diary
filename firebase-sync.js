@@ -326,96 +326,90 @@
       });
   }
 
+  // PATH A — Partner Today: Single Document Realtime Listener (users/{partnerId}/diaries/{TODAY_DATE_STR})
   function startPartnerDiariesListener(partnerId, sharingStartDate) {
     if (partnerDiariesUnsubscribe) partnerDiariesUnsubscribe();
 
-    let isInitialSnapshot = true;
-
-    // Direct Firestore Query Filter for sharingStartDate privacy enforcement
-    partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
-      .where('date', '>=', sharingStartDate)
-      .onSnapshot(async (snapshot) => {
+    partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries').doc(TODAY_DATE_STR)
+      .onSnapshot(async (docSnap) => {
         try {
-          console.log(`[Partner Sync] Listener snapshot received for partner ${partnerId}, docs: ${snapshot.docs.length}, initial: ${isInitialSnapshot}`);
-
-          if (isInitialSnapshot) {
-            console.log('[Partner Sync] initial diary snapshot received');
-            const activeDocIds = new Set();
-            
-            // Save all active partner diaries from initial snapshot
-            const savePromises = snapshot.docs.map(async (doc) => {
-              const dateStr = doc.id;
-              const data = doc.data();
-              if (data && data.content && data.content.trim()) {
-                activeDocIds.add(dateStr);
-                let timestampStr = new Date().toISOString();
-                if (data.updatedAt) {
-                  timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
-                }
-                console.log('[Partner Sync] partner diary initial save:', dateStr);
-                await DiaryDB.saveDiary({
-                  date: dateStr,
-                  content: data.content,
-                  mood: data.mood || 'none',
-                  timestamp: timestampStr
-                }, partnerId);
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            if (data && data.content && data.content.trim()) {
+              let timestampStr = new Date().toISOString();
+              if (data.updatedAt) {
+                timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
               }
-            });
-            await Promise.all(savePromises);
-
-            // Compare with local IndexedDB cached partner diaries and purge stale/deleted ones
-            try {
-              const localPartnerDiaries = await DiaryDB.getAllDiaries(partnerId);
-              for (const localRecord of localPartnerDiaries) {
-                if (!activeDocIds.has(localRecord.date)) {
-                  console.log('[Partner Sync] Purging stale local deleted partner diary:', localRecord.date);
-                  await DiaryDB.deleteDiary(localRecord.date, partnerId);
-                }
-              }
-            } catch (purgeErr) {
-              console.warn('[Partner Sync] Failed to purge stale local diaries:', purgeErr);
+              console.log('[Partner Today Sync] Realtime document update received for date:', TODAY_DATE_STR);
+              await DiaryDB.saveDiary({
+                date: TODAY_DATE_STR,
+                content: data.content,
+                mood: data.mood || 'none',
+                timestamp: timestampStr
+              }, partnerId);
+            } else {
+              console.log('[Partner Today Sync] Empty content, clearing local partner today diary:', TODAY_DATE_STR);
+              await DiaryDB.deleteDiary(TODAY_DATE_STR, partnerId);
             }
-
-            isInitialSnapshot = false;
           } else {
-            // Process subsequent docChanges cleanly without stale re-saves
-            const changePromises = snapshot.docChanges().map(async (change) => {
-              const dateStr = change.doc.id;
-              if (change.type === 'removed') {
-                console.log('[Partner Sync] partner diary removed:', dateStr);
-                await DiaryDB.deleteDiary(dateStr, partnerId);
-              } else {
-                const data = change.doc.data();
-                if (data && data.content && data.content.trim()) {
-                  let timestampStr = new Date().toISOString();
-                  if (data.updatedAt) {
-                    timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
-                  }
-                  console.log('[Partner Sync] partner diary updated:', dateStr);
-                  await DiaryDB.saveDiary({
-                    date: dateStr,
-                    content: data.content,
-                    mood: data.mood || 'none',
-                    timestamp: timestampStr
-                  }, partnerId);
-                } else {
-                  await DiaryDB.deleteDiary(dateStr, partnerId);
-                }
-              }
-            });
-            await Promise.all(changePromises);
+            console.log('[Partner Today Sync] Document deleted or non-existent for date:', TODAY_DATE_STR);
+            await DiaryDB.deleteDiary(TODAY_DATE_STR, partnerId);
           }
 
-          // Trigger UI updates AFTER all IndexedDB writes are complete
-          console.log('[Partner Sync] triggering Today UI refresh');
           if (window.loadTodayData) await window.loadTodayData();
-          if (window.initGarden) await window.initGarden();
-          if (window.renderWeeklyReview) await window.renderWeeklyReview();
         } catch (err) {
-          console.error("[Partner] Diaries sync failed:", err);
+          console.error("[Partner Today Sync] Failed to process document snapshot:", err);
         }
+      }, (err) => {
+        console.error("[Partner Today Listener] Realtime single document subscription error:", err);
       });
   }
+
+  // PATH B — Partner History: Date-Specific Single Document Read with IndexedDB Cache
+  window.getPartnerDiaryByDate = async function(partnerId, date, sharingStartDate) {
+    if (!partnerId || !date || !sharingStartDate) return null;
+
+    // Privacy guard: deny client read request if date < sharingStartDate
+    if (date < sharingStartDate) {
+      console.log(`[Partner History] Date ${date} is prior to sharingStartDate ${sharingStartDate}. Access DENIED.`);
+      return null;
+    }
+
+    // Check IndexedDB cache first (${partnerId}_${date})
+    try {
+      const cached = await DiaryDB.getDiary(date, partnerId);
+      if (cached && cached.content) {
+        console.log(`[Partner History] Serving cached partner diary for ${date}`);
+        return cached;
+      }
+    } catch (_) {}
+
+    // On-demand single document read from Firestore: users/{partnerId}/diaries/{date}
+    try {
+      console.log(`[Partner History] Fetching single document for ${date}...`);
+      const docSnap = await window.db.collection('users').doc(partnerId).collection('diaries').doc(date).get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        if (data && data.content && data.content.trim()) {
+          let timestampStr = new Date().toISOString();
+          if (data.updatedAt) {
+            timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
+          }
+          const record = {
+            date: date,
+            content: data.content,
+            mood: data.mood || 'none',
+            timestamp: timestampStr
+          };
+          await DiaryDB.saveDiary(record, partnerId);
+          return record;
+        }
+      }
+    } catch (err) {
+      console.error(`[Partner History] Single document read failed for ${date}:`, err);
+    }
+    return null;
+  };
 
   function startPartnerMemosListener(partnerId, sharingStartDate) {
     if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
