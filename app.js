@@ -2634,7 +2634,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
       };
     } else {
       deleteBtn.classList.add('hidden');
-      if (isDateEditable(dateStr)) {
+      if (isDateInCurrentWeek(dateStr)) {
         editBtn.classList.remove('hidden');
         editBtn.textContent = '寫日記';
         editBtn.onclick = () => {
@@ -3981,4 +3981,4 @@ window.openEditDiaryDrawer = openEditDiaryDrawer;
 window.SyncManager = SyncManager;
 window.renderWeeklyReview = renderWeeklyReview;
 window.getPartnerName = getPartnerName;
-window.isDateEditable = isDateEditable;
+window.isDateEditable = isDateInCurrentWeek;
