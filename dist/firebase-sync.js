@@ -225,30 +225,48 @@
       });
   }
 
+  function getLocalDateString(connectedAt) {
+    if (!connectedAt) return '2000-01-01';
+    const d = new Date(connectedAt);
+    if (isNaN(d.getTime())) {
+      return typeof connectedAt === 'string' ? connectedAt.slice(0, 10) : '2000-01-01';
+    }
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   function startPartnerDiariesListener(partnerId, connectedAt) {
     if (partnerDiariesUnsubscribe) partnerDiariesUnsubscribe();
 
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
       .onSnapshot(async (snapshot) => {
         try {
+          const minDateStr = getLocalDateString(connectedAt);
           const promises = snapshot.docChanges().map(async (change) => {
             const dateStr = change.doc.id;
-            if (change.type === "removed") {
-              await DiaryDB.deleteDiary(dateStr, partnerId);
-            } else {
-              const data = change.doc.data();
-              if (data && data.content) {
-                let timestampStr = new Date().toISOString();
-                if (data.updatedAt) {
-                  timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
+            if (dateStr >= minDateStr) {
+              if (change.type === "removed") {
+                await DiaryDB.deleteDiary(dateStr, partnerId);
+              } else {
+                const data = change.doc.data();
+                if (data && data.content) {
+                  let timestampStr = new Date().toISOString();
+                  if (data.updatedAt) {
+                    timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
+                  }
+                  await DiaryDB.saveDiary({
+                    date: dateStr,
+                    content: data.content,
+                    mood: data.mood || 'none',
+                    timestamp: timestampStr
+                  }, partnerId);
                 }
-                await DiaryDB.saveDiary({
-                  date: dateStr,
-                  content: data.content,
-                  mood: data.mood || 'none',
-                  timestamp: timestampStr
-                }, partnerId);
               }
+            } else {
+              // Delete any pre-pairing local partner cache
+              await DiaryDB.deleteDiary(dateStr, partnerId);
             }
           });
           await Promise.all(promises);
@@ -269,20 +287,25 @@
     partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos')
       .onSnapshot(async (snapshot) => {
         try {
+          const minDateStr = getLocalDateString(connectedAt);
           const promises = snapshot.docChanges().map(async (change) => {
             const memoId = change.doc.id;
             const data = change.doc.data();
             if (data && data.date) {
-              if (change.type === "removed") {
-                await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
+              if (data.date >= minDateStr) {
+                if (change.type === "removed") {
+                  await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
+                } else {
+                  await DiaryDB.saveMemo({
+                    id: Number(memoId) || memoId,
+                    date: data.date,
+                    time: data.time || '00:00',
+                    content: data.content,
+                    images: data.images || []
+                  }, partnerId);
+                }
               } else {
-                await DiaryDB.saveMemo({
-                  id: Number(memoId) || memoId,
-                  date: data.date,
-                  time: data.time || '00:00',
-                  content: data.content,
-                  images: data.images || []
-                }, partnerId);
+                await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
               }
             }
           });
