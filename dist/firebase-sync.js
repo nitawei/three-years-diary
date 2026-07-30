@@ -583,9 +583,18 @@
       });
 
       try {
+        let ownerDisplayName = '筆友';
+        try {
+          const uDoc = await window.db.collection('users').doc(realAuthUid).get();
+          if (uDoc.exists && uDoc.data().displayName) {
+            ownerDisplayName = uDoc.data().displayName;
+          }
+        } catch (_) {}
+
         await window.db.collection('invitations').doc(pin).set({
           invitationId: pin,
           ownerUid: realAuthUid,
+          ownerDisplayName: ownerDisplayName,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -675,7 +684,7 @@
           acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        // 2. Write canonical partnership Single Source of Truth
+        // 2. Write canonical partnership Single Source of Truth (2-write batch only!)
         if (pairId) {
           const partnershipRef = window.db.collection('partnerships').doc(pairId);
           batch.set(partnershipRef, {
@@ -688,23 +697,8 @@
             disconnectedAt: null
           });
         }
-        
-        // 3. Link both users 1-on-1 with pairId and explicit sharingStartDate
-        batch.set(window.db.collection('users').doc(realAuthUid).collection('partner').doc('info'), {
-          partnerId: inviteOwnerUid,
-          pairId: pairId,
-          connectedAt: connectedAt,
-          sharingStartDate: sharingStartDate
-        });
 
-        batch.set(window.db.collection('users').doc(inviteOwnerUid).collection('partner').doc('info'), {
-          partnerId: realAuthUid,
-          pairId: pairId,
-          connectedAt: connectedAt,
-          sharingStartDate: sharingStartDate
-        });
-
-        console.log(`[PARTNER DEBUG] Committing batch with pairId ${pairId}...`);
+        console.log(`[PARTNER DEBUG] Committing 2-write batch with pairId ${pairId}...`);
         await batch.commit();
         console.log(`[PARTNER DEBUG] Batch committed successfully!`);
         return true;
