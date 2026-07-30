@@ -2298,7 +2298,7 @@ async function handleDeleteMemo(id) {
     if (State.editingMemoId === id) {
       exitEditMode();
     }
-    SyncManager.addToQueue('delete_memo', { id });
+    SyncManager.addToQueue('delete_memo', { id, date: State.activeDate });
   } catch (err) {
     console.error('刪除隨筆失敗:', err);
     alert('刪除隨筆失敗，請重試。');
