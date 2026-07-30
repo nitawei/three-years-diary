@@ -2545,6 +2545,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
   if (!modal || !dateText || !deleteBtn || !editBtn || !notebookText || !notebookMeta) return;
 
   editBtn.textContent = '編輯';
+  editBtn.style.color = 'var(--color-text-sub)';
 
   // 格式化日期顯示
   dateText.textContent = dateStr.replace(/-/g, '.');
@@ -2637,6 +2638,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
       if (isDateInCurrentWeek(dateStr)) {
         editBtn.classList.remove('hidden');
         editBtn.textContent = '寫日記';
+        editBtn.style.color = 'var(--color-text-sub)';
         editBtn.onclick = () => {
           modal.classList.add('hidden');
           openEditDiaryDrawer(dateStr);

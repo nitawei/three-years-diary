@@ -343,47 +343,98 @@
     },
     async generateInviteCode(userId) {
       const pin = String(Math.floor(100000 + Math.random() * 900000));
-      await window.db.collection('invitations').doc(pin).set({
-        invitationId: pin,
-        ownerUid: userId,
-        status: 'pending',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      return pin;
+      const inviteDocPath = `invitations/${pin}`;
+      const currentAuthUid = window.auth && window.auth.currentUser ? window.auth.currentUser.uid : null;
+      
+      console.log(`[PARTNER DEBUG] generateInviteCode Start:
+- currentAuthUid: ${currentAuthUid}
+- userId parameter: ${userId}
+- invitePin: ${pin}
+- inviteDocPath: ${inviteDocPath}`);
+
+      try {
+        await window.db.collection('invitations').doc(pin).set({
+          invitationId: pin,
+          ownerUid: userId,
+          status: 'pending',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`[PARTNER DEBUG] generateInviteCode Success for PIN: ${pin}`);
+        return pin;
+      } catch (err) {
+        console.error(`[PARTNER DEBUG] generateInviteCode Error:
+- code: ${err.code}
+- message: ${err.message}`, err);
+        throw err;
+      }
     },
     async acceptInviteCode(userId, pin) {
       const inviteRef = window.db.collection('invitations').doc(pin);
+      const currentAuthUid = window.auth && window.auth.currentUser ? window.auth.currentUser.uid : null;
       
+      console.log(`[PARTNER DEBUG] acceptInviteCode Start:
+- currentAuthUid: ${currentAuthUid}
+- userId parameter: ${userId}
+- invitePin: ${pin}
+- inviteDocPath: ${inviteRef.path}`);
+
       try {
         const inviteDoc = await inviteRef.get();
-        if (!inviteDoc.exists) return false;
+        const inviteExists = inviteDoc.exists;
+        console.log(`[PARTNER DEBUG] Fetch invitation:
+- inviteExists: ${inviteExists}`);
+        
+        if (!inviteExists) {
+          console.warn(`[PARTNER DEBUG] Invitation ${pin} does not exist.`);
+          return false;
+        }
         
         const inviteData = inviteDoc.data();
-        if (inviteData.status !== 'pending' || inviteData.ownerUid === userId) {
+        const inviteOwnerUid = inviteData.ownerUid;
+        const sameUserCheck = (inviteOwnerUid === userId);
+        
+        console.log(`[PARTNER DEBUG] Invitation data:
+- inviteOwnerUid: ${inviteOwnerUid}
+- currentUserUid: ${userId}
+- inviteStatus: ${inviteData.status}
+- sameUserCheck: ${sameUserCheck}`);
+
+        if (inviteData.status !== 'pending' || sameUserCheck) {
+          console.warn(`[PARTNER DEBUG] Validation failed: status is not pending or same user check failed.`);
           return false;
         }
 
         const connectedAt = new Date().toISOString();
         const batch = window.db.batch();
         
+        console.log(`[PARTNER DEBUG] Preparing batch writes:
+- invitationUpdate: status = 'accepted'
+- ownerPartnerWrite path: users/${inviteOwnerUid}/partner/info (partnerId: ${userId})
+- guestPartnerWrite path: users/${userId}/partner/info (partnerId: ${inviteOwnerUid})`);
+
         // 1. Mark invite as accepted
         batch.update(inviteRef, { status: 'accepted' });
         
         // 2. Link both users 1-on-1
         batch.set(window.db.collection('users').doc(userId).collection('partner').doc('info'), {
-          partnerId: inviteData.ownerUid,
+          partnerId: inviteOwnerUid,
           connectedAt: connectedAt
         });
 
-        batch.set(window.db.collection('users').doc(inviteData.ownerUid).collection('partner').doc('info'), {
+        batch.set(window.db.collection('users').doc(inviteOwnerUid).collection('partner').doc('info'), {
           partnerId: userId,
           connectedAt: connectedAt
         });
 
+        console.log(`[PARTNER DEBUG] Committing batch...`);
         await batch.commit();
+        console.log(`[PARTNER DEBUG] Batch committed successfully!`);
         return true;
-      } catch (e) {
-        console.error("[PartnerLink] Transaction failed:", e);
+      } catch (err) {
+        console.error(`[PARTNER DEBUG] acceptInviteCode Error caught:
+- code: ${err.code}
+- message: ${err.message}`, err);
+        alert(`配對失敗：[${err.code || 'UNKNOWN_ERROR'}] ${err.message || err}`);
         return false;
       }
     },
