@@ -492,7 +492,7 @@ body {
 
 .memo-drawer-content {
   position: relative;
-  background-color: var(--color-card-bg);
+  background-color: var(--color-bg);
   background-image: url('drawer_texture.jpg');
   background-blend-mode: multiply;
   background-size: cover;
@@ -1180,7 +1180,7 @@ body {
   right: 0;
   height: 86%; /* Match memo drawer height */
   max-height: 86vh; /* Mobile viewport safety */
-  background-color: var(--color-card-bg);
+  background-color: var(--color-bg);
   background-image: url('drawer_texture.jpg');
   background-blend-mode: multiply;
   background-size: cover;
