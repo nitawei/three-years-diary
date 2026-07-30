@@ -775,7 +775,107 @@
       if (window.loadTodayData) await window.loadTodayData();
 
       return true;
+  };
+
+  // Production Diagnostic Runner
+  window.runProductionDiagnostic = async function(pin) {
+    const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
+    const realAuthUid = authUser ? authUser.uid : null;
+    const projectId = window.firebase && window.firebase.app() ? window.firebase.app().options.projectId : null;
+
+    console.log('=== PRODUCTION DIAGNOSTIC START ===');
+    console.log('Runtime Project ID:', projectId);
+    console.log('Runtime Auth UID:', realAuthUid);
+
+    if (!realAuthUid) {
+      console.error('DIAGNOSTIC FAILED: No active Firebase Auth session.');
+      return;
     }
+
+    if (!pin) {
+      console.error('DIAGNOSTIC FAILED: Please provide a target PIN to test (e.g. runProductionDiagnostic("123456")).');
+      return;
+    }
+
+    const inviteRef = window.db.collection('invitations').doc(pin);
+    const inviteDoc = await inviteRef.get();
+    if (!inviteDoc.exists) {
+      console.error(`DIAGNOSTIC FAILED: Invitation ${pin} does not exist in project ${projectId}.`);
+      return;
+    }
+
+    const inviteData = inviteDoc.data();
+    const inviteOwnerUid = inviteData.ownerUid;
+    const pairId = getPairId(inviteOwnerUid, realAuthUid);
+    const sharingStartDate = TODAY_DATE_STR;
+    const connectedAt = new Date().toISOString();
+
+    console.log('Test Parameters:', { pin, inviteOwnerUid, realAuthUid, pairId, projectId });
+
+    // WRITE #1 TEST: Invitation Update
+    console.log('--- TEST WRITE #1: invitations/' + pin + ' (UPDATE) ---');
+    try {
+      await inviteRef.update({
+        status: 'accepted',
+        acceptedBy: realAuthUid,
+        acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      console.log('WRITE #1 (Invitation Update): PASS');
+    } catch (err) {
+      console.error('WRITE #1 (Invitation Update): FAIL', {
+        path: `invitations/${pin}`, operation: 'UPDATE', projectId, authUid: realAuthUid, code: err.code, message: err.message
+      });
+    }
+
+    // WRITE #2 TEST: Partnership Create
+    console.log('--- TEST WRITE #2: partnerships/' + pairId + ' (CREATE) ---');
+    try {
+      const partnershipRef = window.db.collection('partnerships').doc(pairId);
+      await partnershipRef.set({
+        pairId: pairId,
+        memberUids: [inviteOwnerUid, realAuthUid].sort(),
+        status: 'active',
+        sharingStartDate: sharingStartDate,
+        createdAt: connectedAt,
+        sourceInvitationId: pin,
+        disconnectedAt: null
+      });
+      console.log('WRITE #2 (Partnership Create): PASS');
+    } catch (err) {
+      console.error('WRITE #2 (Partnership Create): FAIL', {
+        path: `partnerships/${pairId}`, operation: 'CREATE', projectId, authUid: realAuthUid, code: err.code, message: err.message
+      });
+    }
+
+    // WRITE #3 TEST: User B partner info
+    console.log('--- TEST WRITE #3: users/' + realAuthUid + '/partner/info (SET) ---');
+    try {
+      const bInfoRef = window.db.collection('users').doc(realAuthUid).collection('partner').doc('info');
+      await bInfoRef.set({
+        partnerId: inviteOwnerUid, pairId: pairId, connectedAt: connectedAt, sharingStartDate: sharingStartDate
+      });
+      console.log('WRITE #3 (User B partner/info): PASS');
+    } catch (err) {
+      console.error('WRITE #3 (User B partner/info): FAIL', {
+        path: `users/${realAuthUid}/partner/info`, operation: 'SET', projectId, authUid: realAuthUid, code: err.code, message: err.message
+      });
+    }
+
+    // WRITE #4 TEST: User A partner info
+    console.log('--- TEST WRITE #4: users/' + inviteOwnerUid + '/partner/info (SET) ---');
+    try {
+      const aInfoRef = window.db.collection('users').doc(inviteOwnerUid).collection('partner').doc('info');
+      await aInfoRef.set({
+        partnerId: realAuthUid, pairId: pairId, connectedAt: connectedAt, sharingStartDate: sharingStartDate
+      });
+      console.log('WRITE #4 (User A partner/info): PASS');
+    } catch (err) {
+      console.error('WRITE #4 (User A partner/info): FAIL', {
+        path: `users/${inviteOwnerUid}/partner/info`, operation: 'SET', projectId, authUid: realAuthUid, code: err.code, message: err.message
+      });
+    }
+
+    console.log('=== PRODUCTION DIAGNOSTIC END ===');
   };
 
   // Custom stacked lined notebook cards rendering for Weekly Review Page
