@@ -48,66 +48,77 @@
       // Update State variables
       State.currentUser = user.uid;
       
-      // Check if user has nickname profile in Firestore
+      // Check if user has profile in Firestore
       try {
-        const userDoc = await window.db.collection('users').doc(user.uid).get();
-        if (userDoc.exists) {
-          const profile = userDoc.data();
-          console.log("[Firebase Auth] User profile found:", profile);
-          
-          // Save user profile locally to IndexedDB
-          await DiaryDB.saveUser({
-            id: user.uid,
-            displayName: profile.displayName,
-            email: user.email,
-            provider: 'google',
-            createdAt: profile.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            startedAt: profile.startedAt || TODAY_DATE_STR
-          });
+        let userDoc = await window.db.collection('users').doc(user.uid).get();
+        if (!userDoc.exists) {
+          const autoName = user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
+          console.log("[Firebase Auth] Initializing missing user profile for Google user:", autoName);
+          await window.db.collection('users').doc(user.uid).set({
+            displayName: autoName,
+            createdAt: new Date().toISOString(),
+            startedAt: TODAY_DATE_STR
+          }, { merge: true });
+          userDoc = await window.db.collection('users').doc(user.uid).get();
+        }
 
-          const startYear = new Date(profile.startedAt || TODAY_DATE_STR).getFullYear();
-          localStorage.setItem(`cycle_start_year_${user.uid}`, String(startYear));
-          localStorage.setItem(`cycle_start_date_${user.uid}`, profile.startedAt || TODAY_DATE_STR);
+        const profile = userDoc.exists ? userDoc.data() : {};
+        const displayName = profile.displayName || user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
+        console.log("[Firebase Auth] User profile active:", displayName);
+        
+        // Save user profile locally to IndexedDB
+        await DiaryDB.saveUser({
+          id: user.uid,
+          displayName: displayName,
+          email: user.email,
+          provider: 'google',
+          createdAt: profile.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          startedAt: profile.startedAt || TODAY_DATE_STR
+        });
 
-          // Download all diaries and memos from Firestore for this user
-          await syncAllFromFirestore(user.uid);
+        const startYear = new Date(profile.startedAt || TODAY_DATE_STR).getFullYear();
+        localStorage.setItem(`cycle_start_year_${user.uid}`, String(startYear));
+        localStorage.setItem(`cycle_start_date_${user.uid}`, profile.startedAt || TODAY_DATE_STR);
 
-          // Subscribe to partner info updates
-          startPartnerInfoListener(user.uid);
-          
-          // Process any pending local sync items to Firestore
-          if (window.SyncManager) window.SyncManager.processQueue();
-          
-          // Redirect to today if currently on login/onboarding
-          if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash') {
-            window.location.hash = 'today';
-          } else {
-            // Reload page data
-            await window.loadTodayData();
-          }
+        // Download all diaries and memos from Firestore for this user
+        await syncAllFromFirestore(user.uid);
+
+        // Subscribe to partner info updates
+        startPartnerInfoListener(user.uid);
+        
+        // Process any pending local sync items to Firestore
+        if (window.SyncManager) window.SyncManager.processQueue();
+        
+        // Redirect to today if currently on login/onboarding/splash
+        if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash' || !window.location.hash) {
+          window.location.hash = 'today';
         } else {
-          console.log("[Firebase Auth] No user profile found. Redirecting to onboarding...");
-          window.location.hash = 'onboarding';
+          // Reload page data
+          await window.loadTodayData();
         }
       } catch (err) {
         console.error("[Firebase Auth] Error fetching user profile:", err);
         try {
-          const localUser = await DiaryDB.getUser(user.uid);
-          if (localUser && localUser.displayName) {
-            console.log("[Firebase Auth] Graceful fallback: local user found, redirecting to today");
-            if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash') {
-              window.location.hash = 'today';
-            } else {
-              await window.loadTodayData();
-            }
+          const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
+          await DiaryDB.saveUser({
+            id: user.uid,
+            displayName: fallbackName,
+            email: user.email,
+            provider: 'google',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            startedAt: TODAY_DATE_STR
+          });
+          console.log("[Firebase Auth] Graceful fallback applied for Google user, redirecting to today");
+          if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash' || !window.location.hash) {
+            window.location.hash = 'today';
           } else {
-            console.log("[Firebase Auth] Graceful fallback: no local user, redirecting to onboarding");
-            window.location.hash = 'onboarding';
+            await window.loadTodayData();
           }
         } catch (localErr) {
           console.error("[Firebase Auth] Local fallback failed:", localErr);
-          window.location.hash = 'onboarding';
+          window.location.hash = 'today';
         }
       }
     } else {

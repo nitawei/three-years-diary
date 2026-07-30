@@ -283,26 +283,41 @@ async function handleRouting() {
   if (splashPage) splashPage.classList.add('hidden');
   if (loginPage) loginPage.classList.add('hidden');
   
-  // 檢查 User Profile 是否已填寫 display name (防範跳過引導頁)
-  const user = await DiaryDB.getUser(session.userId);
+  // 檢查 User Profile 是否已填寫 display name
+  let user = await DiaryDB.getUser(session.userId);
   if (!user || !user.displayName) {
-    if (window.location.hash !== '#onboarding') {
-      window.location.hash = 'onboarding';
+    const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
+    if (authUser && (authUser.displayName || authUser.email)) {
+      const fallbackName = authUser.displayName || authUser.email.split('@')[0];
+      user = {
+        id: authUser.uid,
+        displayName: fallbackName,
+        email: authUser.email,
+        provider: 'google',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        startedAt: TODAY_DATE_STR
+      };
+      await DiaryDB.saveUser(user);
+    } else {
+      if (window.location.hash !== '#onboarding') {
+        window.location.hash = 'onboarding';
+        return;
+      }
+      
+      if (indicators) indicators.style.display = 'none';
+      if (switcher) switcher.style.display = 'none';
+      
+      if (loginPage) loginPage.classList.add('hidden');
+      if (onboardingPage) onboardingPage.classList.remove('hidden');
+      if (todayPage) todayPage.classList.add('hidden');
+      if (weeklyPage) weeklyPage.classList.add('hidden');
+      if (gardenPage) gardenPage.classList.add('hidden');
+      if (partnerPage) partnerPage.classList.add('hidden');
+      
+      setupOnboardingInput();
       return;
     }
-    
-    if (indicators) indicators.style.display = 'none';
-    if (switcher) switcher.style.display = 'none';
-    
-    if (loginPage) loginPage.classList.add('hidden');
-    if (onboardingPage) onboardingPage.classList.remove('hidden');
-    if (todayPage) todayPage.classList.add('hidden');
-    if (weeklyPage) weeklyPage.classList.add('hidden');
-    if (gardenPage) gardenPage.classList.add('hidden');
-    if (partnerPage) partnerPage.classList.add('hidden');
-    
-    setupOnboardingInput();
-    return;
   }
   
   // 登入且已 onboarding，將 State.currentUser 映射到該使用者 ID，並載入快取
