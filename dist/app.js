@@ -499,15 +499,20 @@ async function getPartnerName() {
   return '筆友';
 }
 
-// 伴侶日記分享 Mock 服務
+// 伴侶日記分享 服務 (優先委派至 Firestore 實體服務)
 const PartnerService = {
   getPartnerId(userId) {
+    if (window.PartnerService && window.PartnerService !== PartnerService) {
+      return window.PartnerService.getPartnerId(userId);
+    }
     const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
     return links[userId] || null;
   },
-  generateInviteCode(userId) {
+  async generateInviteCode(userId) {
+    if (window.PartnerService && window.PartnerService !== PartnerService) {
+      return await window.PartnerService.generateInviteCode(userId);
+    }
     const codes = JSON.parse(localStorage.getItem('partner_invite_codes') || '{}');
-    // 清除舊邀請碼
     for (const pin in codes) {
       if (codes[pin] === userId) delete codes[pin];
     }
@@ -516,29 +521,15 @@ const PartnerService = {
     localStorage.setItem('partner_invite_codes', JSON.stringify(codes));
     return pin;
   },
-  acceptInviteCode(userId, pin) {
-    const codes = JSON.parse(localStorage.getItem('partner_invite_codes') || '{}');
-    const generatorId = codes[pin];
-    if (generatorId && generatorId !== userId) {
-      const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
-      links[userId] = generatorId;
-      links[generatorId] = userId;
-      localStorage.setItem('partner_links', JSON.stringify(links));
-      
-      delete codes[pin];
-      localStorage.setItem('partner_invite_codes', JSON.stringify(codes));
-      return true;
+  async acceptInviteCode(userId, pin) {
+    if (window.PartnerService && window.PartnerService !== PartnerService) {
+      return await window.PartnerService.acceptInviteCode(userId, pin);
     }
     return false;
   },
-  cancelSharing(userId) {
-    const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
-    const partnerId = links[userId];
-    if (partnerId) {
-      delete links[userId];
-      delete links[partnerId];
-      localStorage.setItem('partner_links', JSON.stringify(links));
-      return true;
+  async cancelSharing(userId) {
+    if (window.PartnerService && window.PartnerService !== PartnerService) {
+      return await window.PartnerService.cancelSharing(userId);
     }
     return false;
   }

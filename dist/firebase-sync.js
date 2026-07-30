@@ -1014,7 +1014,7 @@
             panelInviteInput.classList.add('hidden');
             await window.loadTodayData();
           } else {
-            alert('驗證失敗，請輸入正確的邀請碼，且不可驗證自己所產生的代碼。');
+            console.trace('[SELF INVITE BLOCKED btnPartnerVerifyCode else block - acceptInviteCode returned false]');
           }
         } catch (err) {
           alert('驗證時發生錯誤，請稍後重試。');
