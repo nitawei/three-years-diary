@@ -233,24 +233,21 @@
         try {
           const promises = snapshot.docChanges().map(async (change) => {
             const dateStr = change.doc.id;
-            const connectedDateStr = (connectedAt && typeof connectedAt === 'string') ? connectedAt.slice(0, 10) : '2000-01-01';
-            if (dateStr >= connectedDateStr) {
-              if (change.type === "removed") {
-                await DiaryDB.deleteDiary(dateStr, partnerId);
-              } else {
-                const data = change.doc.data();
-                if (data && data.content) {
-                  let timestampStr = new Date().toISOString();
-                  if (data.updatedAt) {
-                    timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
-                  }
-                  await DiaryDB.saveDiary({
-                    date: dateStr,
-                    content: data.content,
-                    mood: data.mood || 'none',
-                    timestamp: timestampStr
-                  }, partnerId);
+            if (change.type === "removed") {
+              await DiaryDB.deleteDiary(dateStr, partnerId);
+            } else {
+              const data = change.doc.data();
+              if (data && data.content) {
+                let timestampStr = new Date().toISOString();
+                if (data.updatedAt) {
+                  timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
                 }
+                await DiaryDB.saveDiary({
+                  date: dateStr,
+                  content: data.content,
+                  mood: data.mood || 'none',
+                  timestamp: timestampStr
+                }, partnerId);
               }
             }
           });
@@ -275,8 +272,7 @@
           const promises = snapshot.docChanges().map(async (change) => {
             const memoId = change.doc.id;
             const data = change.doc.data();
-            const connectedDateStr = (connectedAt && typeof connectedAt === 'string') ? connectedAt.slice(0, 10) : '2000-01-01';
-            if (data && data.date && data.date >= connectedDateStr) {
+            if (data && data.date) {
               if (change.type === "removed") {
                 await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
               } else {
