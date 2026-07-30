@@ -32,6 +32,18 @@ if (typeof firebase !== 'undefined') {
   firebase.initializeApp(firebaseConfig);
   window.auth = firebase.auth();
   window.db = firebase.firestore();
+
+  // Check if test environment requested Firebase Emulators
+  if (typeof window !== 'undefined' && (window.location.search.includes('useEmulator=true') || window.IS_EMULATOR_TEST)) {
+    console.log("⚡ [Firebase Init] Test Mode Active — Connecting to Auth & Firestore Emulators...");
+    try {
+      window.auth.useEmulator("http://localhost:9099");
+      window.db.useEmulator("localhost", 8080);
+    } catch (emuErr) {
+      console.warn("⚠️ [Firebase Init] Emulator connection warning:", emuErr);
+    }
+  }
+
   console.log("[Firebase Init] Compatibility SDK initialized successfully.");
 } else {
   console.warn("[Firebase Init] Firebase SDK failed to load. Using offline mock fallback.");
