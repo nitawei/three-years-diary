@@ -1,5 +1,6 @@
 // firebase-sync.js - Firebase integration layer for time travel diary vanilla app
 (function() {
+  console.log('[1095 BUILD]', '1435544');
   const TODAY_DATE_STR = (new Date(Date.now() - new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
 
   // Clear any existing mock offline sessions on startup to force users to sign in with Google
