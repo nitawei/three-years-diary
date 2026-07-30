@@ -215,6 +215,13 @@
     }
   }
 
+  let partnershipUnsubscribe = null;
+
+  function getPairId(uid1, uid2) {
+    if (!uid1 || !uid2) return null;
+    return [uid1, uid2].sort().join('_');
+  }
+
   function getSharingStartDate(data) {
     if (data && data.sharingStartDate && typeof data.sharingStartDate === 'string' && data.sharingStartDate.length >= 10) {
       return data.sharingStartDate.slice(0, 10);
@@ -227,6 +234,32 @@
     return '2000-01-01';
   }
 
+  function startPartnershipListener(pairId, partnerId, uid) {
+    if (partnershipUnsubscribe) partnershipUnsubscribe();
+
+    partnershipUnsubscribe = window.db.collection('partnerships').doc(pairId)
+      .onSnapshot(async (docSnap) => {
+        if (docSnap.exists && docSnap.data().status === 'active') {
+          const data = docSnap.data();
+          const sharingStartDate = data.sharingStartDate || TODAY_DATE_STR;
+          console.log(`[Partnership Sync] Active pair ${pairId}, sharingStartDate: ${sharingStartDate}`);
+
+          startPartnerDiariesListener(partnerId, sharingStartDate);
+          startPartnerMemosListener(partnerId, sharingStartDate);
+          if (window.loadTodayData) await window.loadTodayData();
+        } else {
+          console.log(`[Partnership Sync] Pair ${pairId} status disconnected or document deleted.`);
+          currentPartnerId = null;
+          currentConnectedAt = null;
+          stopPartnerDataListeners();
+          if (partnerId) await DiaryDB.clearUserData(partnerId);
+          if (window.loadTodayData) await window.loadTodayData();
+        }
+      }, (err) => {
+        console.error("[Partnership Sync] Subscription error:", err);
+      });
+  }
+
   // Real-time Partner Info updates listener
   function startPartnerInfoListener(uid) {
     if (partnerUnsubscribe) partnerUnsubscribe();
@@ -237,11 +270,10 @@
           const data = docSnap.data();
           const partnerId = data.partnerId;
           const connectedAt = data.connectedAt;
-          const sharingStartDate = getSharingStartDate(data);
+          const pairId = data.pairId || getPairId(uid, partnerId);
 
           if (partnerId !== currentPartnerId) {
-            console.log("[Partner] Connected with partner:", partnerId);
-            console.log('[Partner Sync] partnerId ready:', partnerId, 'sharingStartDate:', sharingStartDate);
+            console.log("[Partner] Connected with partner:", partnerId, "pairId:", pairId);
             currentPartnerId = partnerId;
             currentConnectedAt = connectedAt;
 
@@ -251,17 +283,21 @@
             links[partnerId] = uid;
             localStorage.setItem('partner_links', JSON.stringify(links));
 
-            // Start listening to partner's updates with explicit sharingStartDate
-            startPartnerDiariesListener(partnerId, sharingStartDate);
-            startPartnerMemosListener(partnerId, sharingStartDate);
+            // Start listening to canonical partnership Single Source of Truth
+            if (pairId) {
+              startPartnershipListener(pairId, partnerId, uid);
+            } else {
+              const sharingStartDate = getSharingStartDate(data);
+              startPartnerDiariesListener(partnerId, sharingStartDate);
+              startPartnerMemosListener(partnerId, sharingStartDate);
+            }
 
-            // Trigger UI refresh to transition from "尚未聯結" to "已聯結"
-            console.log('[Partner Sync] triggering Today UI refresh');
             if (window.loadTodayData) await window.loadTodayData();
           }
         } else {
           if (currentPartnerId !== null) {
             console.log("[Partner] Disconnected.");
+            const oldPartnerId = currentPartnerId;
             currentPartnerId = null;
             currentConnectedAt = null;
 
@@ -271,6 +307,7 @@
             localStorage.setItem('partner_links', JSON.stringify(links));
 
             stopPartnerDataListeners();
+            if (oldPartnerId) await DiaryDB.clearUserData(oldPartnerId);
             if (window.loadTodayData) await window.loadTodayData();
             if (window.initGarden) await window.initGarden();
           }
@@ -548,24 +585,40 @@
 - guestPartnerWrite path: users/${userId}/partner/info (partnerId: ${inviteOwnerUid})`);
 
         const sharingStartDate = TODAY_DATE_STR;
+        const pairId = getPairId(inviteOwnerUid, userId);
 
         // 1. Mark invite as accepted
         batch.update(inviteRef, { status: 'accepted' });
+
+        // 2. Write canonical partnership Single Source of Truth
+        if (pairId) {
+          const partnershipRef = window.db.collection('partnerships').doc(pairId);
+          batch.set(partnershipRef, {
+            pairId: pairId,
+            memberUids: [inviteOwnerUid, userId].sort(),
+            status: 'active',
+            sharingStartDate: sharingStartDate,
+            createdAt: connectedAt,
+            disconnectedAt: null
+          });
+        }
         
-        // 2. Link both users 1-on-1 with explicit sharingStartDate
+        // 3. Link both users 1-on-1 with pairId and explicit sharingStartDate
         batch.set(window.db.collection('users').doc(userId).collection('partner').doc('info'), {
           partnerId: inviteOwnerUid,
+          pairId: pairId,
           connectedAt: connectedAt,
           sharingStartDate: sharingStartDate
         });
 
         batch.set(window.db.collection('users').doc(inviteOwnerUid).collection('partner').doc('info'), {
           partnerId: userId,
+          pairId: pairId,
           connectedAt: connectedAt,
           sharingStartDate: sharingStartDate
         });
 
-        console.log(`[PARTNER DEBUG] Committing batch...`);
+        console.log(`[PARTNER DEBUG] Committing batch with pairId ${pairId}...`);
         await batch.commit();
         console.log(`[PARTNER DEBUG] Batch committed successfully!`);
         return true;
@@ -585,38 +638,51 @@
       }
 
       let partnerId = currentPartnerId;
-      if (!partnerId) {
+      let pairId = null;
+
+      try {
+        const docSnap = await window.db.collection('users').doc(realUid).collection('partner').doc('info').get();
+        if (docSnap.exists) {
+          partnerId = docSnap.data().partnerId || partnerId;
+          pairId = docSnap.data().pairId;
+        }
+      } catch (fetchErr) {
+        console.warn("[PartnerLink] Could not fetch partner info prior to cancel:", fetchErr);
+      }
+
+      if (!pairId && partnerId) {
+        pairId = getPairId(realUid, partnerId);
+      }
+
+      console.log(`[PartnerLink] Cancelling sharing for user ${realUid} (partner: ${partnerId}, pairId: ${pairId})...`);
+
+      // 1. Mark canonical partnership status as disconnected (Atomic Real-time Trigger)
+      if (pairId) {
         try {
-          const docSnap = await window.db.collection('users').doc(realUid).collection('partner').doc('info').get();
-          if (docSnap.exists) {
-            partnerId = docSnap.data().partnerId;
-          }
-        } catch (fetchErr) {
-          console.warn("[PartnerLink] Could not fetch partner info prior to cancel:", fetchErr);
+          await window.db.collection('partnerships').doc(pairId).update({
+            status: 'disconnected',
+            disconnectedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          console.log("[PartnerLink] Canonical partnership set to disconnected.");
+        } catch (pairErr) {
+          console.warn("[PartnerLink] Updating partnership status notice:", pairErr);
         }
       }
 
-      console.log(`[PartnerLink] Cancelling sharing for user ${realUid} (partner: ${partnerId})...`);
-
-      // 1. Delete own partner info (Guaranteed allowed by Firestore rules)
+      // 2. Delete own partner info
       try {
         await window.db.collection('users').doc(realUid).collection('partner').doc('info').delete();
-        console.log("[PartnerLink] Own partner info deleted successfully.");
-      } catch (ownErr) {
-        console.error("[PartnerLink] Failed to delete own partner info:", ownErr);
-      }
+      } catch (ownErr) {}
 
-      // 2. Delete partner's partner info if partnerId exists
+      // 3. Delete partner's partner info
       if (partnerId) {
         try {
           await window.db.collection('users').doc(partnerId).collection('partner').doc('info').delete();
-          console.log("[PartnerLink] Partner's partner info deleted successfully.");
-        } catch (partnerErr) {
-          console.warn("[PartnerLink] Partner document deletion notice:", partnerErr);
-        }
+        } catch (partnerErr) {}
+        await DiaryDB.clearUserData(partnerId);
       }
 
-      // 3. Reset local state & listeners
+      // 4. Reset local state & listeners
       currentPartnerId = null;
       currentConnectedAt = null;
       stopPartnerDataListeners();
