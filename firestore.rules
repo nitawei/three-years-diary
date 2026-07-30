@@ -12,9 +12,11 @@ service cloud.firestore {
         date >= get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.sharingStartDate;
     }
 
-    function isPartnerMemoActive(uidA, uidB) {
-      return get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.status == 'active' &&
-        uidA in get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.memberUids;
+    function isPartnerMemoActive(uidA, uidB, date) {
+      let pairData = get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data;
+      return pairData.status == 'active' &&
+        uidA in pairData.memberUids &&
+        date >= pairData.sharingStartDate;
     }
 
     // 1. 邀請碼權限：嚴格狀態機、時效過期、與 affectedKeys 不可變欄位鎖定
@@ -98,14 +100,18 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // 5. 對稱隨筆讀取權限：明確拆分 get (單文件) 與 list (集合查詢)
+    // 5. 對稱隨筆讀取權限：明確拆分 get (單文件，含 date >= sharingStartDate 隱私驗證) 與 list (集合查詢)
     match /users/{userId}/memos/{memoId} {
       allow get: if request.auth != null && (
         request.auth.uid == userId ||
-        isPartnerMemoActive(request.auth.uid, userId)
+        (
+          'date' in resource.data &&
+          resource.data.date != null &&
+          isPartnerMemoActive(request.auth.uid, userId, resource.data.date)
+        )
       );
       allow list: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // 6. 個人 Profile 檔案 (100% 私有隔離)
