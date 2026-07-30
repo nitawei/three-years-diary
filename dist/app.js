@@ -1068,6 +1068,10 @@ function setupEventListeners() {
 
     textarea.addEventListener('blur', () => {
       removeManuscriptCursor();
+      const text = textarea.value ? textarea.value.trim() : '';
+      if (text.length > 0) {
+        SyncManager.addToQueue('save_diary', { date: State.activeDate, content: textarea.value, mood: State.selectedMood });
+      }
     });
 
     // Listen to selectionchange to handle cursor navigation, deletions, and insertions

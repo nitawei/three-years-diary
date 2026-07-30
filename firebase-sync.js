@@ -375,36 +375,45 @@
       const item = queue[0];
       try {
         if (item.action === 'save_diary') {
-          await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).set({
-            date: item.data.date,
-            content: item.data.content,
-            mood: item.data.mood,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          if (item.data && item.data.date && item.data.content) {
+            await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).set({
+              date: item.data.date,
+              content: item.data.content,
+              mood: item.data.mood || 'none',
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          }
         } else if (item.action === 'delete_diary') {
-          await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
+          if (item.data && item.data.date) {
+            await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
+          }
         } else if (item.action === 'save_memo') {
-          // Find the memo in local storage or IndexedDB to get time and images
-          const allMemos = await DiaryDB.getMemosForDate(item.data.date, uid);
-          const memoRecord = allMemos.find(m => m.date === item.data.date && m.content === item.data.content);
-          const memoId = memoRecord ? String(memoRecord.id) : String(Math.random());
-          await window.db.collection('users').doc(uid).collection('memos').doc(memoId).set({
-            id: memoId,
-            date: item.data.date,
-            content: item.data.content,
-            time: memoRecord ? memoRecord.time : '00:00',
-            images: memoRecord ? memoRecord.images : [],
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          if (item.data && item.data.date && item.data.content) {
+            const allMemos = await DiaryDB.getMemosForDate(item.data.date, uid);
+            const memoRecord = allMemos.find(m => m.date === item.data.date && m.content === item.data.content);
+            const memoId = memoRecord ? String(memoRecord.id) : String(Math.random());
+            await window.db.collection('users').doc(uid).collection('memos').doc(memoId).set({
+              id: memoId,
+              date: item.data.date,
+              content: item.data.content,
+              time: memoRecord ? memoRecord.time : '00:00',
+              images: memoRecord ? memoRecord.images : [],
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          }
         } else if (item.action === 'delete_memo') {
-          await window.db.collection('users').doc(uid).collection('memos').doc(String(item.data.id)).delete();
+          if (item.data && item.data.id) {
+            await window.db.collection('users').doc(uid).collection('memos').doc(String(item.data.id)).delete();
+          }
         }
         queue.shift();
         this.saveQueue(queue);
         this.updateStatusUI();
       } catch (err) {
-        console.error('[Firebase SyncManager] Sync failed:', err);
-        break;
+        console.error('[Firebase SyncManager] Sync item failed, discarding corrupted item to unblock queue:', err, item);
+        queue.shift();
+        this.saveQueue(queue);
+        this.updateStatusUI();
       }
     }
   };
