@@ -285,7 +285,9 @@
 
     let isInitialSnapshot = true;
 
+    // Direct Firestore Query Filter for sharingStartDate privacy enforcement
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
+      .where('date', '>=', sharingStartDate)
       .onSnapshot(async (snapshot) => {
         try {
           console.log(`[Partner Sync] Listener snapshot received for partner ${partnerId}, docs: ${snapshot.docs.length}, initial: ${isInitialSnapshot}`);
@@ -298,7 +300,7 @@
             const savePromises = snapshot.docs.map(async (doc) => {
               const dateStr = doc.id;
               const data = doc.data();
-              if (dateStr >= sharingStartDate && data && data.content && data.content.trim()) {
+              if (data && data.content && data.content.trim()) {
                 activeDocIds.add(dateStr);
                 let timestampStr = new Date().toISOString();
                 if (data.updatedAt) {
@@ -338,7 +340,7 @@
                 await DiaryDB.deleteDiary(dateStr, partnerId);
               } else {
                 const data = change.doc.data();
-                if (dateStr >= sharingStartDate && data && data.content && data.content.trim()) {
+                if (data && data.content && data.content.trim()) {
                   let timestampStr = new Date().toISOString();
                   if (data.updatedAt) {
                     timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
@@ -373,26 +375,23 @@
     if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
 
     partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos')
+      .where('date', '>=', sharingStartDate)
       .onSnapshot(async (snapshot) => {
         try {
           const promises = snapshot.docChanges().map(async (change) => {
             const memoId = change.doc.id;
             const data = change.doc.data();
             if (data && data.date) {
-              if (data.date >= sharingStartDate) {
-                if (change.type === "removed") {
-                  await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
-                } else {
-                  await DiaryDB.saveMemo({
-                    id: Number(memoId) || memoId,
-                    date: data.date,
-                    time: data.time || '00:00',
-                    content: data.content,
-                    images: data.images || []
-                  }, partnerId);
-                }
-              } else {
+              if (change.type === "removed") {
                 await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
+              } else {
+                await DiaryDB.saveMemo({
+                  id: Number(memoId) || memoId,
+                  date: data.date,
+                  time: data.time || '00:00',
+                  content: data.content,
+                  images: data.images || []
+                }, partnerId);
               }
             }
           });
