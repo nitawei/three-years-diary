@@ -587,8 +587,12 @@
         const sharingStartDate = TODAY_DATE_STR;
         const pairId = getPairId(inviteOwnerUid, userId);
 
-        // 1. Mark invite as accepted
-        batch.update(inviteRef, { status: 'accepted' });
+        // 1. Mark invite as accepted atomically with acceptor metadata
+        batch.update(inviteRef, {
+          status: 'accepted',
+          acceptedBy: userId,
+          acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
         // 2. Write canonical partnership Single Source of Truth
         if (pairId) {
@@ -599,6 +603,7 @@
             status: 'active',
             sharingStartDate: sharingStartDate,
             createdAt: connectedAt,
+            sourceInvitationId: pin,
             disconnectedAt: null
           });
         }
