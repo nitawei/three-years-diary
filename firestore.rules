@@ -54,13 +54,10 @@ service cloud.firestore {
         request.auth.uid in request.resource.data.memberUids &&
         request.resource.data.status == 'active' &&
         pairId == getPairId(request.resource.data.memberUids[0], request.resource.data.memberUids[1]) &&
-        (
-          let invAfter = getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data;
-          invAfter.status == 'accepted' &&
-          invAfter.acceptedBy == request.auth.uid &&
-          invAfter.ownerUid != request.auth.uid &&
-          invAfter.ownerUid in request.resource.data.memberUids
-        );
+        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.status == 'accepted' &&
+        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.acceptedBy == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid != request.auth.uid &&
+        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid in request.resource.data.memberUids;
 
       // UPDATE: 僅允許成員將 status 改為 disconnected，且 affectedKeys 僅限 ['status', 'disconnectedAt']
       allow update: if request.auth != null &&
