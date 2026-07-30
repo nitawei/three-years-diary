@@ -123,11 +123,13 @@
       console.log("[Firebase Auth] User logged out.");
       clearSessionCompat();
       stopAllListeners();
+      State.currentUser = 'guest'; // GUEST = 'guest'
       
       // Redirect to login if on protected pages
       if (window.location.hash !== '#login' && window.location.hash !== '#splash') {
         window.location.hash = 'login';
       }
+      if (window.handleRouting) await window.handleRouting();
     }
   });
 
@@ -963,6 +965,10 @@
 
   // Custom stacked lined notebook cards rendering for Weekly Review Page
   window.renderWeeklyReview = async function() {
+    if (!State.currentUser) {
+      console.log("[Auth State] Skipping renderWeeklyReview because Auth is initializing (State.currentUser is null)");
+      return;
+    }
     const rangeText = document.getElementById('weekly-range-text');
     const reviewList = document.getElementById('weekly-review-list');
     const btnNext = document.getElementById('btn-next-week');

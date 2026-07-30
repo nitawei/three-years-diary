@@ -750,6 +750,10 @@ function renderPartnerManuscriptGrid(content, mood = 'black') {
 
 // ==================== IndexedDB 數據載入與渲染 ====================
 async function loadTodayData() {
+  if (!State.currentUser) {
+    console.log("[Auth State] Skipping loadTodayData because Auth is initializing (State.currentUser is null)");
+    return;
+  }
   try {
     // 0. 更新角色切換器的選項文字
     const switcher = document.getElementById('profile-switcher');
@@ -2559,6 +2563,10 @@ function getGardenYearsOrder() {
 }
 
 async function initGarden() {
+  if (!State.currentUser) {
+    console.log("[Auth State] Skipping initGarden because Auth is initializing (State.currentUser is null)");
+    return;
+  }
   const startYear = getCycleStartYear();
   const years = getGardenYearsOrder();
 
