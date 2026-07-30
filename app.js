@@ -1816,11 +1816,44 @@ function setupEventListeners() {
           console.log("[Firebase Auth] Initiating Google Popup Login...");
           const userCred = await window.auth.signInWithPopup(provider);
           if (userCred && userCred.user) {
-            console.log("[Firebase Auth] Google login successful:", userCred.user.uid);
+            const uid = userCred.user.uid;
+            const email = userCred.user.email || '';
+            const displayName = userCred.user.displayName || (email ? email.split('@')[0] : '筆友');
+            console.log("[Firebase Auth] Google login successful:", uid);
+
+            // 1. Synchronously set session in LocalStorage
+            setSession(uid, email, 'google');
             if (window.setSessionCompat) {
-              window.setSessionCompat(userCred.user.uid, userCred.user.email, 'google');
+              window.setSessionCompat(uid, email, 'google');
             }
-            State.currentUser = userCred.user.uid;
+
+            // 2. Synchronously save user profile into IndexedDB
+            const userObj = {
+              id: uid,
+              displayName: displayName,
+              email: email,
+              provider: 'google',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              startedAt: TODAY_DATE_STR
+            };
+            await DiaryDB.saveUser(userObj);
+
+            // 3. Save profile to Firestore
+            try {
+              if (window.db) {
+                await window.db.collection('users').doc(uid).set({
+                  displayName: displayName,
+                  createdAt: new Date().toISOString(),
+                  startedAt: TODAY_DATE_STR
+                }, { merge: true });
+              }
+            } catch (fsErr) {
+              console.warn("[Firebase Auth] Firestore user profile sync notice:", fsErr);
+            }
+
+            // 4. Update State and render TODAY page immediately
+            State.currentUser = uid;
             window.location.hash = 'today';
             await handleRouting();
           }
@@ -1833,10 +1866,27 @@ function setupEventListeners() {
             alert("偵測到瀏覽器開啟了隱私/無痕模式。請允許開啟彈出視窗以完成 Google 帳號登入。");
             const userCred = await window.auth.signInWithPopup(provider);
             if (userCred && userCred.user) {
+              const uid = userCred.user.uid;
+              const email = userCred.user.email || '';
+              const displayName = userCred.user.displayName || (email ? email.split('@')[0] : '筆友');
+
+              setSession(uid, email, 'google');
               if (window.setSessionCompat) {
-                window.setSessionCompat(userCred.user.uid, userCred.user.email, 'google');
+                window.setSessionCompat(uid, email, 'google');
               }
-              State.currentUser = userCred.user.uid;
+
+              const userObj = {
+                id: uid,
+                displayName: displayName,
+                email: email,
+                provider: 'google',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                startedAt: TODAY_DATE_STR
+              };
+              await DiaryDB.saveUser(userObj);
+
+              State.currentUser = uid;
               window.location.hash = 'today';
               await handleRouting();
             }
