@@ -518,13 +518,13 @@
   };
 
   // Override PartnerService Invite Flow and Linkage Logic
-  window.PartnerService = {
+  const FirebasePartnerService = {
     getPartnerId(userId) {
       return currentPartnerId;
     },
     async previewInviteCode(pin) {
       const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
-      const realAuthUid = authUser ? authUser.uid : null;
+      const realAuthUid = authUser ? authUser.uid : (State.currentUser && State.currentUser !== 'user_a' && State.currentUser !== 'user_b' ? State.currentUser : null);
 
       if (!realAuthUid) {
         alert('請先進行 Google 登入後再進行配對預覽。');
@@ -777,8 +777,10 @@
       stopPartnerDataListeners();
       if (window.loadTodayData) await window.loadTodayData();
 
-      return true;
+    }
   };
+  window.FirebasePartnerService = FirebasePartnerService;
+  window.PartnerService = FirebasePartnerService;
 
   // Production Diagnostic Runner
   window.runProductionDiagnostic = async function(pin) {

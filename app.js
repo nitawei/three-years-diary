@@ -517,20 +517,29 @@ async function getPartnerName() {
 // 伴侶日記分享 服務 (優先委派至 Firestore 實體服務)
 const PartnerService = {
   getPartnerId(userId) {
-    if (window.PartnerService && window.PartnerService !== PartnerService) {
+    if (window.FirebasePartnerService && window.FirebasePartnerService.getPartnerId) {
+      return window.FirebasePartnerService.getPartnerId(userId);
+    }
+    if (window.PartnerService && window.PartnerService !== PartnerService && window.PartnerService.getPartnerId) {
       return window.PartnerService.getPartnerId(userId);
     }
     const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
     return links[userId] || null;
   },
   async previewInviteCode(pin) {
+    if (window.FirebasePartnerService && window.FirebasePartnerService.previewInviteCode) {
+      return await window.FirebasePartnerService.previewInviteCode(pin);
+    }
     if (window.PartnerService && window.PartnerService !== PartnerService && window.PartnerService.previewInviteCode) {
       return await window.PartnerService.previewInviteCode(pin);
     }
-    return { valid: false, error: '服務未初始化' };
+    return { valid: false, error: '請先登入 Google 帳號' };
   },
   async generateInviteCode(userId) {
-    if (window.PartnerService && window.PartnerService !== PartnerService) {
+    if (window.FirebasePartnerService && window.FirebasePartnerService.generateInviteCode) {
+      return await window.FirebasePartnerService.generateInviteCode(userId);
+    }
+    if (window.PartnerService && window.PartnerService !== PartnerService && window.PartnerService.generateInviteCode) {
       return await window.PartnerService.generateInviteCode(userId);
     }
     const codes = JSON.parse(localStorage.getItem('partner_invite_codes') || '{}');
@@ -543,13 +552,19 @@ const PartnerService = {
     return pin;
   },
   async acceptInviteCode(userId, pin) {
-    if (window.PartnerService && window.PartnerService !== PartnerService) {
+    if (window.FirebasePartnerService && window.FirebasePartnerService.acceptInviteCode) {
+      return await window.FirebasePartnerService.acceptInviteCode(userId, pin);
+    }
+    if (window.PartnerService && window.PartnerService !== PartnerService && window.PartnerService.acceptInviteCode) {
       return await window.PartnerService.acceptInviteCode(userId, pin);
     }
     return false;
   },
   async cancelSharing(userId) {
-    if (window.PartnerService && window.PartnerService !== PartnerService) {
+    if (window.FirebasePartnerService && window.FirebasePartnerService.cancelSharing) {
+      return await window.FirebasePartnerService.cancelSharing(userId);
+    }
+    if (window.PartnerService && window.PartnerService !== PartnerService && window.PartnerService.cancelSharing) {
       return await window.PartnerService.cancelSharing(userId);
     }
     return false;
@@ -4129,7 +4144,9 @@ async function openEditDiaryDrawer(dateStr) {
 }
 
 window.State = State;
-window.PartnerService = PartnerService;
+if (!window.PartnerService || window.PartnerService === PartnerService) {
+  window.PartnerService = window.FirebasePartnerService || PartnerService;
+}
 window.isDateInCurrentWeek = isDateInCurrentWeek;
 window.generateExportHTML = generateExportHTML;
 window.encryptData = encryptData;
