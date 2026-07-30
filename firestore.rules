@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. 允許任何登入使用者建立與讀取/更新邀請碼
+    match /invitations/{pin} {
+      allow read, create: if request.auth != null;
+      allow update: if request.auth != null && (resource.data.ownerUid == request.auth.uid || resource.data.status == 'pending');
+    }
+    
+    // 2. 允許使用者讀寫自己的日記與備忘錄
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 3. 關鍵配對權限：允許使用者讀寫自己的配對資訊；
+    //    或者當前使用者就是對方寫入的 partnerId 時，允許寫入對方（建立對稱配對關係）
+    match /users/{userId}/partner/info {
+      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.uid == resource.data.partnerId);
+      allow write: if request.auth != null && (request.auth.uid == userId || request.auth.uid == request.resource.data.partnerId);
+    }
+  }
+}
