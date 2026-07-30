@@ -508,6 +508,12 @@ const PartnerService = {
     const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
     return links[userId] || null;
   },
+  async previewInviteCode(pin) {
+    if (window.PartnerService && window.PartnerService !== PartnerService && window.PartnerService.previewInviteCode) {
+      return await window.PartnerService.previewInviteCode(pin);
+    }
+    return { valid: false, error: '服務未初始化' };
+  },
   async generateInviteCode(userId) {
     if (window.PartnerService && window.PartnerService !== PartnerService) {
       return await window.PartnerService.generateInviteCode(userId);

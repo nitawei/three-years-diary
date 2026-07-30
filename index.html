@@ -345,6 +345,17 @@
               </div>
             </div>
 
+            <!-- 3.5. 預覽與明確接受配對頁面 -->
+            <div id="partner-invite-preview-panel" class="partner-panel hidden" style="text-align: center; padding: var(--space-md) 0 var(--space-xs) 0;">
+              <p style="font-size: var(--font-size-base); color: var(--color-text-main); font-weight: 600; margin-bottom: var(--space-xs);">
+                你即將與 <span id="partner-preview-inviter-name" style="color: var(--color-mood-green); font-weight: 700;">筆友</span> 建立筆友關係
+              </p>
+              <div style="display: flex; gap: var(--space-xs); justify-content: center; margin-top: var(--space-md);">
+                <button class="btn-save-pill" id="btn-partner-confirm-accept" style="padding: var(--space-xs) var(--space-xl); font-size: var(--font-size-sm); background-color: var(--color-mood-green); color: white;">接受配對</button>
+                <button class="btn-partner-back" id="btn-partner-preview-cancel" style="background: none; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: var(--space-xs) var(--space-md); font-size: var(--font-size-xs); color: var(--color-text-sub); cursor: pointer;">取消</button>
+              </div>
+            </div>
+
             <!-- 4. 已聯結展示伴侶今日日記頁面 -->
             <div id="partner-paired-panel" class="partner-panel hidden" style="position: relative; padding-bottom: var(--space-3xl);">
               <p id="partner-paired-meta" style="font-size: var(--font-size-xxs); color: var(--color-text-sub); opacity: 0.8; margin-top: 2px; margin-bottom: 10px;">

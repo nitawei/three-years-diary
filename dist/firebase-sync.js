@@ -513,6 +513,52 @@
     getPartnerId(userId) {
       return currentPartnerId;
     },
+    async previewInviteCode(pin) {
+      const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
+      const realAuthUid = authUser ? authUser.uid : null;
+
+      if (!realAuthUid) {
+        alert('請先進行 Google 登入後再進行配對預覽。');
+        return { valid: false, error: 'NO_AUTH' };
+      }
+
+      const inviteRef = window.db.collection('invitations').doc(pin);
+      try {
+        const inviteDoc = await inviteRef.get();
+        if (!inviteDoc.exists) {
+          return { valid: false, error: '邀請碼不存在' };
+        }
+
+        const inviteData = inviteDoc.data();
+        const inviteOwnerUid = inviteData ? inviteData.ownerUid : null;
+
+        if (inviteOwnerUid === realAuthUid) {
+          return { valid: false, error: '不能輸入自己所產生的邀請碼' };
+        }
+
+        if (inviteData.status !== 'pending') {
+          return { valid: false, error: '此邀請碼已被使用或已失效' };
+        }
+
+        let inviterName = '筆友';
+        try {
+          const userDoc = await window.db.collection('users').doc(inviteOwnerUid).get();
+          if (userDoc.exists && userDoc.data().displayName) {
+            inviterName = userDoc.data().displayName;
+          }
+        } catch (_) {}
+
+        return {
+          valid: true,
+          ownerUid: inviteOwnerUid,
+          inviterName: inviterName,
+          pin: pin
+        };
+      } catch (err) {
+        console.error('[PARTNER DEBUG] previewInviteCode error:', err);
+        return { valid: false, error: err.message || '無法預覽邀請碼' };
+      }
+    },
     async generateInviteCode(userId) {
       const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
       const realAuthUid = authUser ? authUser.uid : (userId && userId !== 'user_a' && userId !== 'user_b' ? userId : null);
@@ -1001,10 +1047,17 @@
       });
     }
 
-    // 3. Partner Verify Code Button
+    // 3. Partner Verify Code Button (Step 1: Preview PIN)
     const btnPartnerVerifyCode = document.getElementById('btn-partner-verify-code');
     const pinInput = document.getElementById('partner-pin-input');
     const panelInviteInput = document.getElementById('partner-invite-input-panel');
+    const panelInvitePreview = document.getElementById('partner-invite-preview-panel');
+    const inviterNameSpan = document.getElementById('partner-preview-inviter-name');
+    const btnConfirmAccept = document.getElementById('btn-partner-confirm-accept');
+    const btnPreviewCancel = document.getElementById('btn-partner-preview-cancel');
+
+    let currentPendingPin = null;
+
     if (btnPartnerVerifyCode && pinInput && panelInviteInput) {
       const newBtn = btnPartnerVerifyCode.cloneNode(true);
       btnPartnerVerifyCode.parentNode.replaceChild(newBtn, btnPartnerVerifyCode);
@@ -1016,19 +1069,58 @@
         }
 
         try {
-          const success = await window.PartnerService.acceptInviteCode(State.currentUser, pin);
+          console.log('[PARTNER PREVIEW] Verifying PIN for preview:', pin);
+          const previewRes = await window.PartnerService.previewInviteCode(pin);
+          if (!previewRes.valid) {
+            alert(previewRes.error || '驗證失敗：邀請碼無效');
+            return;
+          }
+
+          currentPendingPin = pin;
+          if (inviterNameSpan) inviterNameSpan.textContent = previewRes.inviterName || '筆友';
+          
+          panelInviteInput.classList.add('hidden');
+          if (panelInvitePreview) panelInvitePreview.classList.remove('hidden');
+        } catch (err) {
+          alert('預覽時發生錯誤，請稍後重試。');
+        }
+      });
+    }
+
+    // 3.5. Confirm Accept Partner Button (Step 2: Atomic Acceptance Write)
+    if (btnConfirmAccept) {
+      const newConfirmBtn = btnConfirmAccept.cloneNode(true);
+      btnConfirmAccept.parentNode.replaceChild(newConfirmBtn, btnConfirmAccept);
+      newConfirmBtn.addEventListener('click', async () => {
+        if (!currentPendingPin) {
+          alert('請重新輸入邀請碼驗證。');
+          return;
+        }
+
+        try {
+          console.log('[PARTNER ACCEPT] User clicked Confirm Accept for PIN:', currentPendingPin);
+          const success = await window.PartnerService.acceptInviteCode(State.currentUser, currentPendingPin);
           if (success) {
             const partnerName = await getPartnerName();
             alert(`聯結成功！現在可以開始查看${partnerName}的今日日記。`);
             pinInput.value = '';
-            panelInviteInput.classList.add('hidden');
+            if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
             await window.loadTodayData();
-          } else {
-            console.trace('[SELF INVITE BLOCKED btnPartnerVerifyCode else block - acceptInviteCode returned false]');
           }
         } catch (err) {
-          alert('驗證時發生錯誤，請稍後重試。');
+          console.error('[PARTNER ACCEPT ERROR]', err);
+          alert('配對失敗：' + (err.message || err));
         }
+      });
+    }
+
+    if (btnPreviewCancel) {
+      const newCancelBtn = btnPreviewCancel.cloneNode(true);
+      btnPreviewCancel.parentNode.replaceChild(newCancelBtn, btnPreviewCancel);
+      newCancelBtn.addEventListener('click', () => {
+        currentPendingPin = null;
+        if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
+        if (panelUnlinked) panelUnlinked.classList.remove('hidden');
       });
     }
 
