@@ -684,16 +684,28 @@
         const sharingStartDate = TODAY_DATE_STR;
         const pairId = getPairId(inviteOwnerUid, realAuthUid);
 
-        // 1. Mark invite as accepted atomically with acceptor metadata
-        batch.update(inviteRef, {
-          status: 'accepted',
-          acceptedBy: realAuthUid,
-          acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        const partnershipRef = window.db.collection('partnerships').doc(pairId);
+        const partnershipDoc = await partnershipRef.get();
 
-        // 2. Write canonical partnership Single Source of Truth (2-write batch only!)
-        if (pairId) {
-          const partnershipRef = window.db.collection('partnerships').doc(pairId);
+        if (partnershipDoc.exists) {
+          const pData = partnershipDoc.data();
+          if (pData && pData.status === 'active') {
+            console.warn(`[PARTNER DEBUG] Users ${inviteOwnerUid} and ${realAuthUid} are already active partners.`);
+            alert('你們目前已經是筆友，無需重複配對。');
+            return false;
+          }
+          if (pData && pData.status === 'disconnected') {
+            console.log(`[PARTNER DEBUG] Re-partnering: Updating disconnected partnership ${pairId} to active...`);
+            batch.update(partnershipRef, {
+              status: 'active',
+              sharingStartDate: sharingStartDate,
+              sourceInvitationId: pin,
+              createdAt: connectedAt,
+              disconnectedAt: null
+            });
+          }
+        } else {
+          console.log(`[PARTNER DEBUG] First pairing: Creating new partnership ${pairId}...`);
           batch.set(partnershipRef, {
             pairId: pairId,
             memberUids: [inviteOwnerUid, realAuthUid].sort(),
@@ -704,6 +716,13 @@
             disconnectedAt: null
           });
         }
+
+        // 1. Mark invite as accepted atomically with acceptor metadata
+        batch.update(inviteRef, {
+          status: 'accepted',
+          acceptedBy: realAuthUid,
+          acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
         console.log('[REAL ACCEPT BATCH]', {
           projectId: window.firebase?.app()?.options?.projectId,

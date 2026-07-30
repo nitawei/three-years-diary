@@ -59,12 +59,28 @@ service cloud.firestore {
         getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid != request.auth.uid &&
         getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid in request.resource.data.memberUids;
 
-      // UPDATE: 僅允許成員將 status 改為 disconnected，且 affectedKeys 僅限 ['status', 'disconnectedAt']
+      // UPDATE: 允許成員從 active -> disconnected (解除配對) 或 disconnected -> active (重新配對)
       allow update: if request.auth != null &&
         request.auth.uid in resource.data.memberUids &&
-        resource.data.status == 'active' &&
-        request.resource.data.status == 'disconnected' &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'disconnectedAt']);
+        (
+          // 1. 解除配對: active -> disconnected
+          (
+            resource.data.status == 'active' &&
+            request.resource.data.status == 'disconnected' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'disconnectedAt'])
+          ) ||
+          // 2. 重新配對: disconnected -> active (必須透過新邀請碼原子 commit 驗證)
+          (
+            resource.data.status == 'disconnected' &&
+            request.resource.data.status == 'active' &&
+            request.resource.data.memberUids == resource.data.memberUids &&
+            getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.status == 'accepted' &&
+            getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.acceptedBy == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid != request.auth.uid &&
+            getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid in request.resource.data.memberUids &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'sharingStartDate', 'sourceInvitationId', 'createdAt', 'disconnectedAt'])
+          )
+        );
     }
     
     // 3. 配對 Reference 權限 (100% 個人私有領域，禁止跨使用者寫入)
