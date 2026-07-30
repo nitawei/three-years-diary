@@ -1489,8 +1489,75 @@ function setupEventListeners() {
     });
   }
 
-  // 驗證邀請碼邏輯由 firebase-sync.js (Two-step Preview & Accept) 統一處理
-  // 解除聯結與其他視圖控制保留於 app.js / firebase-sync.js 雙向相容
+  // 驗證邀請碼 (Step 1: Preview PIN)
+  const btnPartnerVerifyCode = document.getElementById('btn-partner-verify-code');
+  const panelInvitePreview = document.getElementById('partner-invite-preview-panel');
+  const inviterNameSpan = document.getElementById('partner-preview-inviter-name');
+  const btnConfirmAccept = document.getElementById('btn-partner-confirm-accept');
+  const btnPreviewCancel = document.getElementById('btn-partner-preview-cancel');
+
+  let currentPendingPin = null;
+
+  if (btnPartnerVerifyCode && pinInput && panelInviteInput) {
+    btnPartnerVerifyCode.addEventListener('click', async () => {
+      const pin = pinInput.value.trim().replace(/\s/g, '');
+      if (pin.length !== 6 || isNaN(pin)) {
+        alert('請輸入 6 位數字邀請碼。');
+        return;
+      }
+
+      try {
+        console.log('[PARTNER PREVIEW] Verifying PIN for preview:', pin);
+        const previewRes = await window.PartnerService.previewInviteCode(pin);
+        if (!previewRes.valid) {
+          alert(previewRes.error || '驗證失敗：邀請碼無效');
+          return;
+        }
+
+        currentPendingPin = pin;
+        if (inviterNameSpan) inviterNameSpan.textContent = previewRes.inviterName || '筆友';
+        
+        panelInviteInput.classList.add('hidden');
+        if (panelInvitePreview) panelInvitePreview.classList.remove('hidden');
+      } catch (err) {
+        console.error('[PARTNER PREVIEW ERROR]', err);
+        alert('預覽時發生錯誤，請稍後重試。');
+      }
+    });
+  }
+
+  // 明確接受配對 (Step 2: Accept PIN)
+  if (btnConfirmAccept) {
+    btnConfirmAccept.addEventListener('click', async () => {
+      if (!currentPendingPin) {
+        alert('請重新輸入邀請碼驗證。');
+        return;
+      }
+
+      try {
+        console.log('[PARTNER ACCEPT] User clicked Confirm Accept for PIN:', currentPendingPin);
+        const success = await window.PartnerService.acceptInviteCode(State.currentUser, currentPendingPin);
+        if (success) {
+          const partnerName = await window.getPartnerName();
+          alert(`聯結成功！現在可以開始查看${partnerName}的今日日記。`);
+          pinInput.value = '';
+          if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
+          if (window.loadTodayData) await window.loadTodayData();
+        }
+      } catch (err) {
+        console.error('[PARTNER ACCEPT ERROR]', err);
+        alert('配對失敗：' + (err.message || err));
+      }
+    });
+  }
+
+  if (btnPreviewCancel) {
+    btnPreviewCancel.addEventListener('click', () => {
+      currentPendingPin = null;
+      if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
+      if (panelUnlinked) panelUnlinked.classList.remove('hidden');
+    });
+  }
 
   // 解除聯結
   const btnPartnerUnlink = document.getElementById('btn-partner-unlink');
@@ -1499,9 +1566,9 @@ function setupEventListeners() {
       const partnerName = await window.getPartnerName();
       if (!confirm(`確定要解除與${partnerName}的聯結嗎？\n解除後將立即雙向撤銷今日日記的互看權限。`)) return;
       
-      window.PartnerService.cancelSharing(State.currentUser);
+      await window.PartnerService.cancelSharing(State.currentUser);
       alert('聯結已成功解除，權限已雙向收回。');
-      await loadTodayData();
+      if (window.loadTodayData) await window.loadTodayData();
     });
   }
 
