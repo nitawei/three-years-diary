@@ -269,22 +269,27 @@
       });
   }
 
-  // Real-time Partner Info updates listener
+  let currentPairId = null;
+
+  // Real-time Partner Info & Single Source of Truth Listener
   function startPartnerInfoListener(uid) {
     if (partnerUnsubscribe) partnerUnsubscribe();
 
-    partnerUnsubscribe = window.db.collection('users').doc(uid).collection('partner').doc('info')
-      .onSnapshot(async (docSnap) => {
-        if (docSnap.exists) {
-          const data = docSnap.data();
-          const partnerId = data.partnerId;
-          const connectedAt = data.connectedAt;
-          const pairId = data.pairId || getPairId(uid, partnerId);
+    partnerUnsubscribe = window.db.collection('partnerships')
+      .where('memberUids', 'array-contains', uid)
+      .onSnapshot(async (querySnap) => {
+        const activeDoc = querySnap.docs.find(doc => doc.data().status === 'active');
+        if (activeDoc) {
+          const data = activeDoc.data();
+          const pairId = activeDoc.id;
+          const partnerId = data.memberUids.find(id => id !== uid);
+          const sharingStartDate = data.sharingStartDate || TODAY_DATE_STR;
 
-          if (partnerId !== currentPartnerId) {
-            console.log("[Partner] Connected with partner:", partnerId, "pairId:", pairId);
+          if (partnerId && (partnerId !== currentPartnerId || pairId !== currentPairId)) {
+            console.log("[Partnership Listener] Active partnership connected with partner:", partnerId, "pairId:", pairId);
             currentPartnerId = partnerId;
-            currentConnectedAt = connectedAt;
+            currentPairId = pairId;
+            currentConnectedAt = data.createdAt;
 
             // Sync partner links in localStorage
             const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
@@ -292,22 +297,17 @@
             links[partnerId] = uid;
             localStorage.setItem('partner_links', JSON.stringify(links));
 
-            // Start listening to canonical partnership Single Source of Truth
-            if (pairId) {
-              startPartnershipListener(pairId, partnerId, uid);
-            } else {
-              const sharingStartDate = getSharingStartDate(data);
-              startPartnerDiariesListener(partnerId, sharingStartDate);
-              startPartnerMemosListener(partnerId, sharingStartDate);
-            }
+            startPartnerDiariesListener(partnerId, sharingStartDate);
+            startPartnerMemosListener(partnerId, sharingStartDate);
 
             if (window.loadTodayData) await window.loadTodayData();
           }
         } else {
           if (currentPartnerId !== null) {
-            console.log("[Partner] Disconnected.");
+            console.log("[Partnership Listener] Disconnected or no active partnership.");
             const oldPartnerId = currentPartnerId;
             currentPartnerId = null;
+            currentPairId = null;
             currentConnectedAt = null;
 
             // Clean partner links in localStorage
@@ -322,7 +322,7 @@
           }
         }
       }, (err) => {
-        console.error("[Partner] Info subscription failed:", err);
+        console.error("[Partnership Listener] Subscription error:", err);
       });
   }
 
