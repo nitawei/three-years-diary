@@ -612,6 +612,16 @@
         const sharingStartDate = TODAY_DATE_STR;
         const pairId = getPairId(inviteOwnerUid, realAuthUid);
 
+        console.log('[PARTNER ACCEPT WRITE DEBUG]', {
+          currentAuthUid: realAuthUid,
+          invitationOwnerUid: inviteOwnerUid,
+          invitationStatus: inviteData.status,
+          invitationAcceptedBy: realAuthUid,
+          pairId: pairId,
+          memberUids: [inviteOwnerUid, realAuthUid].sort(),
+          sharingStartDate: sharingStartDate
+        });
+
         // 1. Mark invite as accepted atomically with acceptor metadata
         batch.update(inviteRef, {
           status: 'accepted',
