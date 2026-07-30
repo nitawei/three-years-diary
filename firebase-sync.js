@@ -521,13 +521,16 @@
       }
     },
     async cancelSharing(userId) {
-      if (!userId || !window.db) return false;
+      const realUid = (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : (userId || State.currentUser);
+      if (!realUid || !window.db) {
+        console.warn("[PartnerLink] cancelSharing: No active user session found.");
+        return false;
+      }
+
       let partnerId = currentPartnerId;
-      
-      // Fallback: fetch partnerId from Firestore if currentPartnerId local variable is missing
       if (!partnerId) {
         try {
-          const docSnap = await window.db.collection('users').doc(userId).collection('partner').doc('info').get();
+          const docSnap = await window.db.collection('users').doc(realUid).collection('partner').doc('info').get();
           if (docSnap.exists) {
             partnerId = docSnap.data().partnerId;
           }
@@ -536,28 +539,33 @@
         }
       }
 
-      if (!partnerId) {
-        console.warn("[PartnerLink] cancelSharing: No active partner relationship found.");
-        return false;
-      }
+      console.log(`[PartnerLink] Cancelling sharing for user ${realUid} (partner: ${partnerId})...`);
 
-      console.log(`[PartnerLink] Cancelling sharing between ${userId} and ${partnerId}...`);
-      const batch = window.db.batch();
-      batch.delete(window.db.collection('users').doc(userId).collection('partner').doc('info'));
-      batch.delete(window.db.collection('users').doc(partnerId).collection('partner').doc('info'));
-
+      // 1. Delete own partner info (Guaranteed allowed by Firestore rules)
       try {
-        await batch.commit();
-        console.log("[PartnerLink] Sharing cancelled successfully in Cloud Firestore!");
-        currentPartnerId = null;
-        currentConnectedAt = null;
-        stopPartnerDataListeners();
-        return true;
-      } catch (e) {
-        console.error("[PartnerLink] Unlink failed:", e);
-        alert(`解除聯結失敗：[${e.code || 'UNKNOWN'}] ${e.message || e}`);
-        return false;
+        await window.db.collection('users').doc(realUid).collection('partner').doc('info').delete();
+        console.log("[PartnerLink] Own partner info deleted successfully.");
+      } catch (ownErr) {
+        console.error("[PartnerLink] Failed to delete own partner info:", ownErr);
       }
+
+      // 2. Delete partner's partner info if partnerId exists
+      if (partnerId) {
+        try {
+          await window.db.collection('users').doc(partnerId).collection('partner').doc('info').delete();
+          console.log("[PartnerLink] Partner's partner info deleted successfully.");
+        } catch (partnerErr) {
+          console.warn("[PartnerLink] Partner document deletion notice:", partnerErr);
+        }
+      }
+
+      // 3. Reset local state & listeners
+      currentPartnerId = null;
+      currentConnectedAt = null;
+      stopPartnerDataListeners();
+      if (window.loadTodayData) await window.loadTodayData();
+
+      return true;
     }
   };
 
