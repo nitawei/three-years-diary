@@ -44,20 +44,16 @@ service cloud.firestore {
         );
     }
 
-    // 2. 對稱 Partnership Single Source of Truth 權限 (原子與 getAfter 嚴格雙向綁定驗證)
+    // 2. 對稱 Partnership Single Source of Truth 權限
     match /partnerships/{pairId} {
       allow read: if request.auth != null && request.auth.uid in resource.data.memberUids;
       
-      // CREATE: 必須由接受者與邀請碼原子點擊觸發，getAfter 嚴格驗證 ownerUid & acceptedBy 雙重綁定
+      // CREATE: 必須由成員發起，驗證 2 人成對、成員包含請求者，且 pairId 完全符合規定的 canonical 格式
       allow create: if request.auth != null &&
         request.resource.data.memberUids.size() == 2 &&
         request.auth.uid in request.resource.data.memberUids &&
         request.resource.data.status == 'active' &&
-        pairId == getPairId(request.resource.data.memberUids[0], request.resource.data.memberUids[1]) &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.status == 'accepted' &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.acceptedBy == request.auth.uid &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid != request.auth.uid &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid in request.resource.data.memberUids;
+        pairId == getPairId(request.resource.data.memberUids[0], request.resource.data.memberUids[1]);
 
       // UPDATE: 僅允許成員將 status 改為 disconnected，且 affectedKeys 僅限 ['status', 'disconnectedAt']
       allow update: if request.auth != null &&
