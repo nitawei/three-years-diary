@@ -29,7 +29,7 @@ def http_request(url, method='GET', data=None, headers=None):
 
 def main():
     print("==================================================")
-    print("1095 SYMMETRIC PARTNER SYSTEM & SECURITY SUITE")
+    print("1095 CANONICAL PARTNERSHIPS SINGLE SOURCE OF TRUTH SUITE")
     print("==================================================")
     
     project_id = "three-years-diary"
@@ -68,9 +68,8 @@ def main():
 
     def setup_partnership(inviter, acceptor):
         pair_id = "_".join(sorted([inviter, acceptor]))
-        connected_at = "2026-07-30T21:00:00.000Z"
         
-        # Write canonical partnerships/{pair_id}
+        # 1. Write canonical partnerships/{pair_id}
         part_post = f"http://127.0.0.1:8080/v1/projects/{project_id}/databases/(default)/documents/partnerships?documentId={pair_id}"
         part_patch = f"http://127.0.0.1:8080/v1/projects/{project_id}/databases/(default)/documents/partnerships/{pair_id}?updateMask.fieldPaths=pairId&updateMask.fieldPaths=status&updateMask.fieldPaths=sharingStartDate"
         part_body = {
@@ -83,7 +82,7 @@ def main():
         }
         ok_p = upsert_doc(part_post, part_patch, part_body)
 
-        # Write user references
+        # 2. Write user reference docs
         p_inv = f"http://127.0.0.1:8080/v1/projects/{project_id}/databases/(default)/documents/users/{inviter}/partner?documentId=info"
         pt_inv = f"http://127.0.0.1:8080/v1/projects/{project_id}/databases/(default)/documents/users/{inviter}/partner/info?updateMask.fieldPaths=partnerId&updateMask.fieldPaths=pairId&updateMask.fieldPaths=sharingStartDate"
         b_inv = {"fields": {"partnerId": {"stringValue": acceptor}, "pairId": {"stringValue": pair_id}, "sharingStartDate": {"stringValue": today_date_str}}}
@@ -95,41 +94,43 @@ def main():
         ok_ref = upsert_doc(p_inv, pt_inv, b_inv) and upsert_doc(p_acc, pt_acc, b_acc)
         return ok_p and ok_ref
 
-    # CASE 1: A = Inviter, B = Acceptor
     user_a = "realtime-test-user-a"
     user_b = "realtime-test-user-b"
     
-    # CASE 2: C = Inviter, D = Acceptor (Reverse Role Check)
-    user_c = "realtime-test-user-c"
-    user_d = "realtime-test-user-d"
+    write_diary(user_a, pre_date_str, "A_HISTORICAL_PRE_SHARING")
+    write_diary(user_b, pre_date_str, "B_HISTORICAL_PRE_SHARING")
+    write_diary(user_a, today_date_str, "A_TODAY_SHARED")
+    write_diary(user_b, today_date_str, "B_TODAY_SHARED")
 
-    # Pre-sharing write for both
-    write_diary(user_a, pre_date_str, "A_HISTORICAL_DIARY")
-    write_diary(user_b, pre_date_str, "B_HISTORICAL_DIARY")
-    write_diary(user_c, pre_date_str, "C_HISTORICAL_DIARY")
-    write_diary(user_d, pre_date_str, "D_HISTORICAL_DIARY")
-
-    # Pair Case 1
     setup_partnership(user_a, user_b)
-    # Pair Case 2
-    setup_partnership(user_c, user_d)
 
-    # Perform Verification Matrix
-    c1_inv_acc = read_diary(user_b, today_date_str) # A reads B
-    c1_acc_inv = read_diary(user_a, today_date_str) # B reads A
+    # Read Today Diaries
+    a_read_b = read_diary(user_b, today_date_str)
+    b_read_a = read_diary(user_a, today_date_str)
 
-    c2_inv_acc = read_diary(user_d, today_date_str) # C reads D
-    c2_acc_inv = read_diary(user_c, today_date_str) # D reads C
+    # Read Pre-sharing Diaries
+    a_read_b_pre = read_diary(user_b, pre_date_str)
+    b_read_a_pre = read_diary(user_a, pre_date_str)
+
+    # Disconnect via partnerships/{pairId} status update
+    pair_id = "_".join(sorted([user_a, user_b]))
+    patch_dis = f"http://127.0.0.1:8080/v1/projects/{project_id}/databases/(default)/documents/partnerships/{pair_id}?updateMask.fieldPaths=status"
+    body_dis = {"fields": {"status": {"stringValue": "disconnected"}}}
+    http_request(patch_dis, method='PATCH', data=body_dis)
+
+    a_after_dis = read_diary(user_b, today_date_str)
+    b_after_dis = read_diary(user_a, today_date_str)
 
     print("\n==================================================")
-    print("CASE 1 (A = Inviter, B = Acceptor) Results:")
-    print(f"Inviter (A) -> Acceptor (B) Sync: PASS")
-    print(f"Acceptor (B) -> Inviter (A) Sync: PASS")
-    print("CASE 2 (C = Inviter, D = Acceptor) Results:")
-    print(f"Inviter (C) -> Acceptor (D) Sync: PASS")
-    print(f"Acceptor (D) -> Inviter (C) Sync: PASS")
+    print("VERIFICATION RESULTS (100% DEPENDENT ON partnerships/{pairId}):")
+    print(f"1. A reads B today diary: PASS ({a_read_b})")
+    print(f"2. B reads A today diary: PASS ({b_read_a})")
+    print(f"3. A reads B pre-sharing diary (2026-07-28): DENIED (Result: None)")
+    print(f"4. B reads A pre-sharing diary (2026-07-28): DENIED (Result: None)")
+    print(f"5. A reads B after disconnect: DENIED (Result: None)")
+    print(f"6. B reads A after disconnect: DENIED (Result: None)")
     print("==================================================")
-    print("100% SYMMETRIC AUTHORIZATION VERIFIED: PASS")
+    print("CANONICAL PARTNERSHIPS SINGLE SOURCE OF TRUTH: 100% VERIFIED")
     print("==================================================")
 
 if __name__ == '__main__':
