@@ -3833,13 +3833,9 @@ async function openEditDiaryDrawer(dateStr) {
     initEditDiaryManuscriptGrid();
   }
   
-  // 2. 設定標題與右側邊線對齊之日期
+  // 2. 設定標題日期 (單一相連標題)
   if (title) {
-    title.textContent = '編輯日記';
-  }
-  const dateEl = document.getElementById('edit-diary-drawer-date');
-  if (dateEl) {
-    dateEl.textContent = dateStr.replace(/-/g, '.');
+    title.textContent = `編輯日記 · ${dateStr.replace(/-/g, '.')}`;
   }
   
   // 3. 載入當天日記

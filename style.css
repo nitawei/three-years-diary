@@ -1180,7 +1180,11 @@ body {
   right: 0;
   height: 86%; /* Match memo drawer height */
   max-height: 86vh; /* Mobile viewport safety */
-  background-color: var(--color-bg);
+  background-color: var(--color-card-bg);
+  background-image: url('drawer_texture.jpg');
+  background-blend-mode: multiply;
+  background-size: cover;
+  background-position: center;
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
   display: flex;
