@@ -521,18 +521,41 @@
       }
     },
     async cancelSharing(userId) {
-      if (!currentPartnerId) return false;
-      const partnerId = currentPartnerId;
+      if (!userId || !window.db) return false;
+      let partnerId = currentPartnerId;
+      
+      // Fallback: fetch partnerId from Firestore if currentPartnerId local variable is missing
+      if (!partnerId) {
+        try {
+          const docSnap = await window.db.collection('users').doc(userId).collection('partner').doc('info').get();
+          if (docSnap.exists) {
+            partnerId = docSnap.data().partnerId;
+          }
+        } catch (fetchErr) {
+          console.warn("[PartnerLink] Could not fetch partner info prior to cancel:", fetchErr);
+        }
+      }
 
+      if (!partnerId) {
+        console.warn("[PartnerLink] cancelSharing: No active partner relationship found.");
+        return false;
+      }
+
+      console.log(`[PartnerLink] Cancelling sharing between ${userId} and ${partnerId}...`);
       const batch = window.db.batch();
       batch.delete(window.db.collection('users').doc(userId).collection('partner').doc('info'));
       batch.delete(window.db.collection('users').doc(partnerId).collection('partner').doc('info'));
 
       try {
         await batch.commit();
+        console.log("[PartnerLink] Sharing cancelled successfully in Cloud Firestore!");
+        currentPartnerId = null;
+        currentConnectedAt = null;
+        stopPartnerDataListeners();
         return true;
       } catch (e) {
         console.error("[PartnerLink] Unlink failed:", e);
+        alert(`解除聯結失敗：[${e.code || 'UNKNOWN'}] ${e.message || e}`);
         return false;
       }
     }

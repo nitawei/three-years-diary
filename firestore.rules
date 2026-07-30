@@ -8,10 +8,11 @@ service cloud.firestore {
       allow update: if request.auth != null && (resource.data.ownerUid == request.auth.uid || resource.data.status == 'pending');
     }
     
-    // 2. 配對資訊權限：允許讀取/寫入自己的 partner info，或相互設定 partnerId
+    // 2. 配對資訊權限：允許讀取、建立、更新與刪除自己的 partner info 或相互配對
     match /users/{userId}/partner/info {
       allow read: if request.auth != null && (request.auth.uid == userId || request.auth.uid == resource.data.partnerId);
-      allow write: if request.auth != null && (request.auth.uid == userId || request.auth.uid == request.resource.data.partnerId);
+      allow create, update: if request.auth != null && (request.auth.uid == userId || request.auth.uid == request.resource.data.partnerId);
+      allow delete: if request.auth != null && (request.auth.uid == userId || request.auth.uid == resource.data.partnerId);
     }
 
     // 3. 日記與隨筆權限：允許本人讀寫，且僅允許已配對成功之 Partner 讀取
