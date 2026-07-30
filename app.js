@@ -1443,11 +1443,18 @@ function setupEventListeners() {
   const pinBox = document.getElementById('partner-pin-box');
 
   if (btnPartnerGenCode && panelInviteGen && panelUnlinked && pinBox) {
-    btnPartnerGenCode.addEventListener('click', () => {
-      const pin = window.PartnerService.generateInviteCode(State.currentUser);
-      pinBox.textContent = `${pin.substring(0, 3)} ${pin.substring(3)}`;
-      panelUnlinked.classList.add('hidden');
-      panelInviteGen.classList.remove('hidden');
+    btnPartnerGenCode.addEventListener('click', async () => {
+      try {
+        const pin = await window.PartnerService.generateInviteCode(State.currentUser);
+        if (pin && typeof pin === 'string') {
+          pinBox.textContent = `${pin.substring(0, 3)} ${pin.substring(3)}`;
+          panelUnlinked.classList.add('hidden');
+          panelInviteGen.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error("Error generating invite code:", err);
+        alert("產生邀請碼失敗：" + (err.message || err));
+      }
     });
   }
 
