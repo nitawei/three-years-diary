@@ -224,6 +224,7 @@
 
           if (partnerId !== currentPartnerId) {
             console.log("[Partner] Connected with partner:", partnerId);
+            console.log('[Partner Sync] partnerId ready:', partnerId);
             currentPartnerId = partnerId;
             currentConnectedAt = connectedAt;
 
@@ -236,6 +237,10 @@
             // Start listening to partner's updates
             startPartnerDiariesListener(partnerId, connectedAt);
             startPartnerMemosListener(partnerId, connectedAt);
+
+            // Trigger UI refresh to transition from "尚未聯結" to "已聯結"
+            console.log('[Partner Sync] triggering Today UI refresh');
+            if (window.loadTodayData) await window.loadTodayData();
           }
         } else {
           if (currentPartnerId !== null) {
@@ -249,8 +254,8 @@
             localStorage.setItem('partner_links', JSON.stringify(links));
 
             stopPartnerDataListeners();
-            await window.loadTodayData();
-            await window.initGarden();
+            if (window.loadTodayData) await window.loadTodayData();
+            if (window.initGarden) await window.initGarden();
           }
         }
       }, (err) => {
@@ -273,38 +278,55 @@
   function startPartnerDiariesListener(partnerId, connectedAt) {
     if (partnerDiariesUnsubscribe) partnerDiariesUnsubscribe();
 
+    let isInitialSnapshot = true;
+
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries')
       .onSnapshot(async (snapshot) => {
         try {
+          if (isInitialSnapshot) {
+            console.log('[Partner Sync] initial diary snapshot received');
+          }
           const minDateStr = getLocalDateString(connectedAt);
-          const promises = snapshot.docChanges().map(async (change) => {
-            const dateStr = change.doc.id;
+
+          // Process full docs on initial snapshot or docChanges on subsequent updates
+          const docsToProcess = isInitialSnapshot ? snapshot.docs : snapshot.docChanges().map(c => c.doc);
+          const promises = docsToProcess.map(async (docObj) => {
+            const dateStr = docObj.id;
+            const data = typeof docObj.data === 'function' ? docObj.data() : docObj;
             if (dateStr >= minDateStr) {
-              if (change.type === "removed") {
-                await DiaryDB.deleteDiary(dateStr, partnerId);
-              } else {
-                const data = change.doc.data();
-                if (data && data.content) {
-                  let timestampStr = new Date().toISOString();
-                  if (data.updatedAt) {
-                    timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
-                  }
-                  await DiaryDB.saveDiary({
-                    date: dateStr,
-                    content: data.content,
-                    mood: data.mood || 'none',
-                    timestamp: timestampStr
-                  }, partnerId);
+              if (data && data.content) {
+                let timestampStr = new Date().toISOString();
+                if (data.updatedAt) {
+                  timestampStr = typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : data.updatedAt;
                 }
+                console.log('[Partner Sync] partner diary updated:', dateStr);
+                await DiaryDB.saveDiary({
+                  date: dateStr,
+                  content: data.content,
+                  mood: data.mood || 'none',
+                  timestamp: timestampStr
+                }, partnerId);
               }
             } else {
               // Delete any pre-pairing local partner cache
               await DiaryDB.deleteDiary(dateStr, partnerId);
             }
           });
+
+          // Process removals if not initial snapshot
+          if (!isInitialSnapshot) {
+            snapshot.docChanges().forEach(change => {
+              if (change.type === "removed") {
+                promises.push(DiaryDB.deleteDiary(change.doc.id, partnerId));
+              }
+            });
+          }
+
           await Promise.all(promises);
+          isInitialSnapshot = false;
 
           // Trigger UI updates AFTER all IndexedDB writes are complete
+          console.log('[Partner Sync] triggering Today UI refresh');
           if (window.loadTodayData) await window.loadTodayData();
           if (window.initGarden) await window.initGarden();
           if (window.renderWeeklyReview) await window.renderWeeklyReview();
