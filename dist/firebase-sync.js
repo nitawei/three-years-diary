@@ -144,11 +144,44 @@
     currentConnectedAt = null;
   }
 
+  // Push all local user diaries from IndexedDB up to Cloud Firestore (Ensure no unsynced local data)
+  async function pushLocalDiariesToFirestore(uid) {
+    if (!uid || !window.db) return;
+    console.log("[Sync Push] Scanning local diaries to upload to Cloud Firestore...");
+    try {
+      if (window.SyncManager && window.SyncManager.processQueue) {
+        await window.SyncManager.processQueue();
+      }
+
+      const userDiaries = await DiaryDB.getAllDiaries(uid);
+      const mockDiaries = (uid !== 'user_a') ? await DiaryDB.getAllDiaries('user_a') : [];
+      const allLocalDiaries = [...userDiaries, ...mockDiaries];
+
+      for (const d of allLocalDiaries) {
+        if (d && d.date && d.content && d.content.trim()) {
+          console.log(`[Sync Push] Uploading local diary for date ${d.date} to Cloud Firestore...`);
+          await window.db.collection('users').doc(uid).collection('diaries').doc(d.date).set({
+            date: d.date,
+            content: d.content,
+            mood: d.mood || 'none',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+      }
+      console.log("[Sync Push] All local diaries uploaded to Cloud Firestore successfully.");
+    } catch (err) {
+      console.error("[Sync Push] Failed pushing local diaries to Cloud Firestore:", err);
+    }
+  }
+
   // Sync All user diaries & memos from Firestore to IndexedDB (One-time on login)
   async function syncAllFromFirestore(uid) {
     console.log("[Sync] Pulling diaries and memos from Firestore...");
     try {
-      // Sync diaries
+      // 1. First upload any local unsynced diaries to Cloud Firestore
+      await pushLocalDiariesToFirestore(uid);
+
+      // 2. Sync diaries
       const diariesSnap = await window.db.collection('users').doc(uid).collection('diaries').get();
       diariesSnap.forEach(async (doc) => {
         const data = doc.data();
@@ -156,7 +189,7 @@
           date: doc.id,
           content: data.content,
           mood: data.mood,
-          timestamp: data.updatedAt ? data.updatedAt.toDate().toISOString() : new Date().toISOString()
+          timestamp: data.updatedAt ? (typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : new Date().toISOString()) : new Date().toISOString()
         }, uid);
       });
 
