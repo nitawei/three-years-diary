@@ -684,16 +684,6 @@
         const sharingStartDate = TODAY_DATE_STR;
         const pairId = getPairId(inviteOwnerUid, realAuthUid);
 
-        console.log('[PARTNER ACCEPT WRITE DEBUG]', {
-          currentAuthUid: realAuthUid,
-          invitationOwnerUid: inviteOwnerUid,
-          invitationStatus: inviteData.status,
-          invitationAcceptedBy: realAuthUid,
-          pairId: pairId,
-          memberUids: [inviteOwnerUid, realAuthUid].sort(),
-          sharingStartDate: sharingStartDate
-        });
-
         // 1. Mark invite as accepted atomically with acceptor metadata
         batch.update(inviteRef, {
           status: 'accepted',
@@ -715,11 +705,32 @@
           });
         }
 
-        console.log(`[PARTNER DEBUG] Committing 2-write batch with pairId ${pairId}...`);
+        console.log('[REAL ACCEPT BATCH]', {
+          projectId: window.firebase?.app()?.options?.projectId,
+          authUid: realAuthUid,
+          invitationPath: `invitations/${pin}`,
+          invitationOwnerUid: inviteOwnerUid,
+          invitationStatusBefore: inviteData.status,
+          partnershipPath: `partnerships/${pairId}`,
+          pairId: pairId,
+          memberUids: [inviteOwnerUid, realAuthUid].sort(),
+          sourceInvitationId: pin,
+          partnershipStatus: 'active',
+          sharingStartDate: sharingStartDate
+        });
+
+        console.log('[REAL ACCEPT BATCH] COMMIT START');
+
         await batch.commit();
+
+        console.log('[REAL ACCEPT BATCH] COMMIT SUCCESS');
         console.log(`[PARTNER DEBUG] Batch committed successfully!`);
         return true;
       } catch (err) {
+        console.error('[REAL ACCEPT BATCH] COMMIT FAIL', {
+          code: err ? err.code : 'UNKNOWN',
+          message: err ? err.message : 'UNKNOWN'
+        });
         console.error(`[PARTNER DEBUG] acceptInviteCode Error caught:
 - code: ${err.code}
 - message: ${err.message}`, err);
