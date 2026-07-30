@@ -1480,7 +1480,7 @@ function setupEventListeners() {
         return;
       }
       
-      const success = window.PartnerService.acceptInviteCode(State.currentUser, pin);
+      const success = await window.PartnerService.acceptInviteCode(State.currentUser, pin);
       if (success) {
         const partnerName = await window.getPartnerName();
         alert(`聯結成功！現在可以開始查看${partnerName}的今日日記。`);
@@ -1488,7 +1488,7 @@ function setupEventListeners() {
         panelInviteInput.classList.add('hidden');
         await loadTodayData();
       } else {
-        alert('驗證失敗，請輸入正確的邀請碼，且不可驗證自己所產生的代碼。');
+        console.trace('[SELF INVITE BLOCKED app.js else block]');
       }
     });
   }

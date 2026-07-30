@@ -556,45 +556,52 @@
       const authUser = window.auth && window.auth.currentUser ? window.auth.currentUser : null;
       const realAuthUid = authUser ? authUser.uid : (userId && userId !== 'user_a' && userId !== 'user_b' ? userId : null);
 
+      console.log('[PARTNER ACCEPT RUNTIME]', {
+        authReady: !!window.auth,
+        hasCurrentUser: !!authUser,
+        currentAuthUid: authUser ? authUser.uid : null,
+        currentAuthEmail: authUser ? authUser.email : null,
+      });
+
       if (!realAuthUid) {
+        console.trace('[SELF INVITE BLOCKED no_auth_uid]');
         console.error('[PARTNER AUTH ERROR] No active Firebase Auth session found for acceptInviteCode!');
         alert('請先進行 Google 登入後再進行配對。');
         return false;
       }
 
       const inviteRef = window.db.collection('invitations').doc(pin);
-      
-      console.log('[AUTH DEBUG]', {
-        currentAuthUid: realAuthUid,
-        currentAuthEmail: authUser ? authUser.email : null,
-      });
 
       try {
         const inviteDoc = await inviteRef.get();
         if (!inviteDoc.exists) {
+          console.trace('[SELF INVITE BLOCKED invite_not_found]');
           console.warn(`[PARTNER DEBUG] Invitation ${pin} does not exist.`);
           alert('驗證失敗：邀請碼不存在。');
           return false;
         }
         
         const inviteData = inviteDoc.data();
-        const inviteOwnerUid = inviteData.ownerUid;
+        const inviteOwnerUid = inviteData ? inviteData.ownerUid : null;
         const sameUserCheck = (inviteOwnerUid === realAuthUid);
         
-        console.log('[INVITE ACCEPT DEBUG]', {
-          currentAuthUid: realAuthUid,
-          invitationOwnerUid: inviteOwnerUid,
-          invitationStatus: inviteData.status,
-          sameUserCheck: sameUserCheck
+        console.log('[PARTNER INVITE RUNTIME]', {
+          pin,
+          invitationOwnerUid: inviteData ? inviteData.ownerUid : null,
+          invitationStatus: inviteData ? inviteData.status : null,
+          currentAuthUid: authUser ? authUser.uid : null,
+          sameUser: !!authUser && authUser.uid === inviteOwnerUid,
         });
 
         if (sameUserCheck) {
+          console.trace('[SELF INVITE BLOCKED same_user]');
           console.warn(`[PARTNER DEBUG] Attempted to accept own invitation code! (${realAuthUid} === ${inviteOwnerUid})`);
           alert('不能輸入自己所產生的邀請碼。');
           return false;
         }
 
         if (inviteData.status !== 'pending') {
+          console.trace('[SELF INVITE BLOCKED status_not_pending]');
           console.warn(`[PARTNER DEBUG] Invitation ${pin} status is ${inviteData.status}, not pending.`);
           alert('此邀請碼已被使用或已失效。');
           return false;
