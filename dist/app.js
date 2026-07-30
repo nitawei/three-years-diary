@@ -337,10 +337,9 @@ async function handleRouting() {
   
   if (window.location.hash === '#login' || window.location.hash === '#onboarding' || !window.location.hash) {
     window.location.hash = 'today';
-    return;
   }
   
-  const currentHash = window.location.hash.substring(1);
+  const currentHash = window.location.hash.substring(1) || 'today';
   
   if (loginPage) loginPage.classList.add('hidden');
   if (onboardingPage) onboardingPage.classList.add('hidden');
