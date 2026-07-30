@@ -211,6 +211,7 @@ function getCachedUser() {
  * 3. 頁面狀態同步：將登入用戶 ID 映射至 State.currentUser 並重繪所有視圖。
  */
 async function handleRouting() {
+  window.handleRouting = handleRouting;
   const session = getSession();
   
   const indicators = document.getElementById('app-story-indicators');
@@ -1814,7 +1815,16 @@ function setupEventListeners() {
 
         try {
           console.log("[Firebase Auth] Initiating Google Popup Login...");
-          await window.auth.signInWithPopup(provider);
+          const userCred = await window.auth.signInWithPopup(provider);
+          if (userCred && userCred.user) {
+            console.log("[Firebase Auth] Google login successful:", userCred.user.uid);
+            if (window.setSessionCompat) {
+              window.setSessionCompat(userCred.user.uid, userCred.user.email, 'google');
+            }
+            State.currentUser = userCred.user.uid;
+            window.location.hash = 'today';
+            await handleRouting();
+          }
         } catch (popupErr) {
           console.warn("[Firebase Auth] Primary popup login notice:", popupErr);
           const errMsg = String(popupErr && (popupErr.message || popupErr.code || popupErr));
@@ -1822,7 +1832,15 @@ function setupEventListeners() {
           if (errMsg.includes('missing initial state') || popupErr.code === 'auth/missing-initial-state') {
             console.warn("[Firebase Auth] Storage-partitioned browser environment detected. Retrying Popup Login...");
             alert("偵測到瀏覽器開啟了隱私/無痕模式。請允許開啟彈出視窗以完成 Google 帳號登入。");
-            await window.auth.signInWithPopup(provider);
+            const userCred = await window.auth.signInWithPopup(provider);
+            if (userCred && userCred.user) {
+              if (window.setSessionCompat) {
+                window.setSessionCompat(userCred.user.uid, userCred.user.email, 'google');
+              }
+              State.currentUser = userCred.user.uid;
+              window.location.hash = 'today';
+              await handleRouting();
+            }
             return;
           }
 

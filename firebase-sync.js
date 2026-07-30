@@ -93,10 +93,8 @@
         // Redirect to today if currently on login/onboarding/splash
         if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash' || !window.location.hash) {
           window.location.hash = 'today';
-        } else {
-          // Reload page data
-          await window.loadTodayData();
         }
+        if (window.handleRouting) await window.handleRouting();
       } catch (err) {
         console.error("[Firebase Auth] Error fetching user profile:", err);
         try {
@@ -113,12 +111,12 @@
           console.log("[Firebase Auth] Graceful fallback applied for Google user, redirecting to today");
           if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash' || !window.location.hash) {
             window.location.hash = 'today';
-          } else {
-            await window.loadTodayData();
           }
+          if (window.handleRouting) await window.handleRouting();
         } catch (localErr) {
           console.error("[Firebase Auth] Local fallback failed:", localErr);
           window.location.hash = 'today';
+          if (window.handleRouting) await window.handleRouting();
         }
       }
     } else {
