@@ -17,50 +17,57 @@ service cloud.firestore {
         uidA in get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.memberUids;
     }
 
-    // 1. 邀請碼權限：嚴格狀態機 (pending -> accepted 或 cancelled，accepted / cancelled 不可再修改)
+    // 1. 邀請碼權限：嚴格狀態機、時效過期、與 affectedKeys 不可變欄位鎖定
     match /invitations/{pin} {
       allow read: if request.auth != null;
       allow create: if request.auth != null &&
         request.resource.data.ownerUid == request.auth.uid &&
         request.resource.data.status == 'pending';
+      
       allow update: if request.auth != null &&
         resource.data.status == 'pending' &&
-        request.resource.data.ownerUid == resource.data.ownerUid &&
+        (resource.data.expiresAt == null || request.time < resource.data.expiresAt) &&
         (
-          // Acceptor (非建立者): 僅允許 pending -> accepted，且 acceptedBy 必須填寫為當前登入者
+          // Acceptor (非建立者): 僅允許 pending -> accepted，僅得修改 status, acceptedBy, acceptedAt 欄位
           (
             resource.data.ownerUid != request.auth.uid &&
             request.resource.data.status == 'accepted' &&
-            request.resource.data.acceptedBy == request.auth.uid
+            request.resource.data.acceptedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedAt'])
           ) ||
-          // Owner (建立者): 僅允許 pending -> cancelled
+          // Owner (建立者): 僅允許 pending -> cancelled，僅得修改 status, cancelledAt 欄位
           (
             resource.data.ownerUid == request.auth.uid &&
-            request.resource.data.status == 'cancelled'
+            request.resource.data.status == 'cancelled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt'])
           )
         );
     }
 
-    // 2. 對稱 Partnership Single Source of Truth 權限 (原子與 getAfter 防偽驗證)
+    // 2. 對稱 Partnership Single Source of Truth 權限 (原子與 getAfter 嚴格雙向綁定驗證)
     match /partnerships/{pairId} {
       allow read: if request.auth != null && request.auth.uid in resource.data.memberUids;
       
-      // CREATE: 必須由接受者與邀請碼原子點擊觸發，經過 getAfter 嚴格驗證邀請碼已 atomic accepted
+      // CREATE: 必須由接受者與邀請碼原子點擊觸發，getAfter 嚴格驗證 ownerUid & acceptedBy 雙重綁定
       allow create: if request.auth != null &&
         request.resource.data.memberUids.size() == 2 &&
         request.auth.uid in request.resource.data.memberUids &&
         request.resource.data.status == 'active' &&
         pairId == getPairId(request.resource.data.memberUids[0], request.resource.data.memberUids[1]) &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.status == 'accepted' &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.acceptedBy == request.auth.uid &&
-        getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data.ownerUid != request.auth.uid;
+        (
+          let invAfter = getAfter(/databases/$(database)/documents/invitations/$(request.resource.data.sourceInvitationId)).data;
+          invAfter.status == 'accepted' &&
+          invAfter.acceptedBy == request.auth.uid &&
+          invAfter.ownerUid != request.auth.uid &&
+          invAfter.ownerUid in request.resource.data.memberUids
+        );
 
-      // UPDATE: 成員不可篡改 memberUids / sharingStartDate，僅允許 active -> disconnected 單向離線
+      // UPDATE: 僅允許成員將 status 改為 disconnected，且 affectedKeys 僅限 ['status', 'disconnectedAt']
       allow update: if request.auth != null &&
         request.auth.uid in resource.data.memberUids &&
-        request.resource.data.memberUids == resource.data.memberUids &&
-        request.resource.data.sharingStartDate == resource.data.sharingStartDate &&
-        resource.data.status == 'active' && request.resource.data.status == 'disconnected';
+        resource.data.status == 'active' &&
+        request.resource.data.status == 'disconnected' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'disconnectedAt']);
     }
     
     // 3. 配對 Reference 權限 (100% 個人私有領域，禁止跨使用者寫入)
