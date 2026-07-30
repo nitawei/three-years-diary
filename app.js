@@ -2871,7 +2871,8 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
               if (reviewMemoDrawer && reviewMemoTitle) {
                 const partnerName = await window.getPartnerName();
                 reviewMemoTitle.textContent = `${partnerName}的隨筆`;
-                const partnerMemos = await DiaryDB.getMemosForDate(dateStr, partnerId);
+                const sharingStartDate = window.PartnerService ? window.PartnerService.getSharingStartDate(State.currentUser) : null;
+                const partnerMemos = await window.getPartnerMemosByDate(partnerId, dateStr, sharingStartDate);
                 renderReviewMemoTimeline(partnerMemos);
                 reviewMemoDrawer.classList.remove('hidden');
               }

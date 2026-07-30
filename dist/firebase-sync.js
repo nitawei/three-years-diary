@@ -421,37 +421,72 @@
     return null;
   };
 
+  window.getPartnerMemosByDate = async function(partnerId, date, sharingStartDate) {
+    if (!partnerId || !date) return [];
+    if (sharingStartDate && date < sharingStartDate) {
+      console.warn(`[Partner Memo History] Date ${date} is before sharingStartDate ${sharingStartDate}, blocking access.`);
+      return [];
+    }
+
+    // 1. Priority 1: Firestore get() (Source of Truth)
+    if (navigator.onLine && window.auth && window.auth.currentUser) {
+      try {
+        console.log(`[Partner Memo History] Fetching latest single document from Firestore for date ${date}...`);
+        const docSnap = await window.db.collection('users').doc(partnerId).collection('memos').doc(date).get();
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          const items = (data && Array.isArray(data.items)) ? data.items : [];
+          await DiaryDB.deleteMemosForDate(date, partnerId);
+          for (const item of items) {
+            await DiaryDB.saveMemo(item, partnerId);
+          }
+          return items;
+        } else {
+          await DiaryDB.deleteMemosForDate(date, partnerId);
+          return [];
+        }
+      } catch (err) {
+        console.warn(`[Partner Memo History] Firestore get() failed for ${date}, falling back to IndexedDB:`, err);
+      }
+    }
+
+    // 2. Priority 2: Fallback to IndexedDB cache
+    try {
+      const cached = await DiaryDB.getMemosForDate(date, partnerId);
+      return cached || [];
+    } catch (_) {
+      return [];
+    }
+  };
+
   function startPartnerMemosListener(partnerId, sharingStartDate) {
     if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
 
-    partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos')
-      .where('date', '>=', sharingStartDate)
-      .onSnapshot(async (snapshot) => {
-        try {
-          const promises = snapshot.docChanges().map(async (change) => {
-            const memoId = change.doc.id;
-            const data = change.doc.data();
-            if (data && data.date) {
-              if (change.type === "removed") {
-                await DiaryDB.deleteMemo(Number(memoId) || memoId, partnerId);
-              } else {
-                await DiaryDB.saveMemo({
-                  id: Number(memoId) || memoId,
-                  date: data.date,
-                  time: data.time || '00:00',
-                  content: data.content,
-                  images: data.images || []
-                }, partnerId);
-              }
-            }
-          });
-          await Promise.all(promises);
+    const todayDate = TODAY_DATE_STR;
+    if (sharingStartDate && todayDate < sharingStartDate) {
+      console.log("[Partner Memos Today] Today is before sharingStartDate, skipping listener.");
+      return;
+    }
 
-          // Trigger UI updates AFTER all IndexedDB writes are complete
+    partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos').doc(todayDate)
+      .onSnapshot(async (docSnap) => {
+        try {
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            const items = (data && Array.isArray(data.items)) ? data.items : [];
+            await DiaryDB.deleteMemosForDate(todayDate, partnerId);
+            for (const item of items) {
+              await DiaryDB.saveMemo(item, partnerId);
+            }
+          } else {
+            await DiaryDB.deleteMemosForDate(todayDate, partnerId);
+          }
           if (window.loadTodayData) await window.loadTodayData();
         } catch (err) {
-          console.error("[Partner] Memos sync failed:", err);
+          console.warn("[Partner Memos Today] Realtime sync error:", err);
         }
+      }, (err) => {
+        console.warn("[Partner Memos Today] Subscription notice:", err);
       });
   }
 
@@ -490,23 +525,22 @@
           if (item.data && item.data.date) {
             await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
           }
-        } else if (item.action === 'save_memo') {
-          if (item.data && item.data.date && item.data.content) {
-            const allMemos = await DiaryDB.getMemosForDate(item.data.date, uid);
-            const memoRecord = allMemos.find(m => m.date === item.data.date && m.content === item.data.content);
-            const memoId = memoRecord ? String(memoRecord.id) : String(Math.random());
-            await window.db.collection('users').doc(uid).collection('memos').doc(memoId).set({
-              id: memoId,
-              date: item.data.date,
-              content: item.data.content,
-              time: memoRecord ? memoRecord.time : '00:00',
-              images: memoRecord ? memoRecord.images : [],
+        } else if (item.action === 'save_memo' || item.action === 'delete_memo') {
+          if (item.data && item.data.date) {
+            const date = item.data.date;
+            const allMemos = await DiaryDB.getMemosForDate(date, uid);
+            const memoItems = allMemos.map(m => ({
+              id: m.id,
+              date: m.date,
+              time: m.time || '00:00',
+              content: m.content || '',
+              images: m.images || []
+            }));
+            await window.db.collection('users').doc(uid).collection('memos').doc(date).set({
+              date: date,
+              items: memoItems,
               updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-          }
-        } else if (item.action === 'delete_memo') {
-          if (item.data && item.data.id) {
-            await window.db.collection('users').doc(uid).collection('memos').doc(String(item.data.id)).delete();
+            });
           }
         }
         queue.shift();
