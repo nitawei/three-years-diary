@@ -58,8 +58,9 @@ class DiaryDB {
   }
 
   // ==================== 多角色 Key 轉換 Helper ====================
-  static _getKey(date, userId = 'user_a') {
-    if (!userId || userId === 'user_a') return date;
+  static _getKey(date, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required");
+    if (userId === 'user_a' || userId === 'guest') return date;
     return `${userId}_${date}`;
   }
 
@@ -69,7 +70,8 @@ class DiaryDB {
   }
 
   // ==================== 日記 (Diaries) CRUD ====================
-  static async getDiary(date, userId = 'user_a') {
+  static async getDiary(date, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for getDiary");
     const key = this._getKey(date, userId);
     try {
       const db = await this.open();
@@ -94,7 +96,8 @@ class DiaryDB {
     }
   }
 
-  static async getAllDiaries(userId = 'user_a') {
+  static async getAllDiaries(userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for getAllDiaries");
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
@@ -106,14 +109,14 @@ class DiaryDB {
           const records = request.result || [];
           const filtered = records
             .filter(r => {
-              if (userId === 'user_a') {
+              if (userId === 'user_a' || userId === 'guest') {
                 return !r.date.includes('_');
               } else {
                 return r.date.startsWith(`${userId}_`);
               }
             })
             .map(r => {
-              const originalDate = userId === 'user_a' ? r.date : r.date.substring(userId.length + 1);
+              const originalDate = (userId === 'user_a' || userId === 'guest') ? r.date : r.date.substring(userId.length + 1);
               return { ...r, date: originalDate };
             });
           resolve(filtered);
@@ -128,14 +131,14 @@ class DiaryDB {
         const records = Object.values(diaries);
         return records
           .filter(r => {
-            if (userId === 'user_a') {
+            if (userId === 'user_a' || userId === 'guest') {
               return !r.date.includes('_');
             } else {
               return r.date.startsWith(`${userId}_`);
             }
           })
           .map(r => {
-            const originalDate = userId === 'user_a' ? r.date : r.date.substring(userId.length + 1);
+            const originalDate = (userId === 'user_a' || userId === 'guest') ? r.date : r.date.substring(userId.length + 1);
             return { ...r, date: originalDate };
           });
       } catch (lsErr) {
@@ -143,21 +146,22 @@ class DiaryDB {
         const records = Object.values(this.memoryDiaries);
         return records
           .filter(r => {
-            if (userId === 'user_a') {
+            if (userId === 'user_a' || userId === 'guest') {
               return !r.date.includes('_');
             } else {
               return r.date.startsWith(`${userId}_`);
             }
           })
           .map(r => {
-            const originalDate = userId === 'user_a' ? r.date : r.date.substring(userId.length + 1);
+            const originalDate = (userId === 'user_a' || userId === 'guest') ? r.date : r.date.substring(userId.length + 1);
             return { ...r, date: originalDate };
           });
       }
     }
   }
 
-  static async saveDiary(diary, userId = 'user_a') {
+  static async saveDiary(diary, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for saveDiary");
     // 檢查並設定 startedAt 啟動三年旅程
     try {
       const user = await this.getUser(userId);
@@ -203,7 +207,8 @@ class DiaryDB {
     }
   }
 
-  static async deleteMemosForDate(date, userId = 'user_a') {
+  static async deleteMemosForDate(date, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for deleteMemosForDate");
     try {
       const db = await this.open();
       const memos = await this.getMemosForDate(date, userId);
@@ -225,18 +230,19 @@ class DiaryDB {
       this.useLocalStorage = true;
       try {
         let memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
-        memos = memos.filter(m => !(m.date === date && (m.userId || 'user_a') === userId));
+        memos = memos.filter(m => !(m.date === date && m.userId === userId));
         localStorage.setItem('diary_memos', JSON.stringify(memos));
         return true;
       } catch (lsErr) {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
-        this.memoryMemos = this.memoryMemos.filter(m => !(m.date === date && (m.userId || 'user_a') === userId));
+        this.memoryMemos = this.memoryMemos.filter(m => !(m.date === date && m.userId === userId));
         return true;
       }
     }
   }
 
-  static async deleteDiary(date, userId = 'user_a') {
+  static async deleteDiary(date, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for deleteDiary");
     // 刪除日記的同時也刪除隨筆
     await this.deleteMemosForDate(date, userId);
 
@@ -268,7 +274,8 @@ class DiaryDB {
   }
 
   // ==================== 備忘錄 (Memos) CRUD ====================
-  static async getMemosForDate(date, userId = 'user_a') {
+  static async getMemosForDate(date, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for getMemosForDate");
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
@@ -279,7 +286,7 @@ class DiaryDB {
 
         request.onsuccess = () => {
           let results = request.result || [];
-          results = results.filter(m => (m.userId || 'user_a') === userId);
+          results = results.filter(m => m.userId === userId);
           results.sort((a, b) => b.id - a.id);
           resolve(results);
         };
@@ -290,20 +297,21 @@ class DiaryDB {
       this.useLocalStorage = true;
       try {
         const memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
-        const filtered = memos.filter(m => m.date === date && (m.userId || 'user_a') === userId);
+        const filtered = memos.filter(m => m.date === date && m.userId === userId);
         filtered.sort((a, b) => b.id - a.id);
         return filtered;
       } catch (lsErr) {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
-        const filtered = this.memoryMemos.filter(m => m.date === date && (m.userId || 'user_a') === userId);
+        const filtered = this.memoryMemos.filter(m => m.date === date && m.userId === userId);
         filtered.sort((a, b) => b.id - a.id);
         return filtered;
       }
     }
   }
 
-  static async saveMemo(memo, userId = 'user_a') {
-    const record = { ...memo, userId: memo.userId || userId || 'user_a' };
+  static async saveMemo(memo, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for saveMemo");
+    const record = { ...memo, userId: memo.userId || userId };
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
@@ -492,7 +500,8 @@ class DiaryDB {
     }
   }
 
-  static async getCompletedDiariesCount(userId = 'user_a') {
+  static async getCompletedDiariesCount(userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for getCompletedDiariesCount");
     const all = await this.getAllDiaries(userId);
     let count = 0;
     all.forEach(d => {
@@ -503,7 +512,8 @@ class DiaryDB {
     return count;
   }
 
-  static async getAllMemos(userId = 'user_a') {
+  static async getAllMemos(userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for getAllMemos");
     try {
       const db = await this.open();
       const transaction = db.transaction('memos', 'readonly');
@@ -516,8 +526,7 @@ class DiaryDB {
           const cursor = e.target.result;
           if (cursor) {
             const memo = cursor.value;
-            const memoUser = memo.userId || 'user_a';
-            if (memoUser === userId) {
+            if (memo.userId === userId) {
               memos.push(memo);
             }
             cursor.continue();
@@ -533,7 +542,7 @@ class DiaryDB {
       try {
         memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
       } catch (lsErr) {}
-      return memos.filter(m => (m.userId || 'user_a') === userId);
+      return memos.filter(m => m.userId === userId);
     }
   }
 

@@ -39,7 +39,7 @@ const State = {
   editingMemoId: null, // 當前正在編輯的備忘錄 ID，null 表示新增模式
   activeDate: TODAY_DATE_STR, // 自動獲取今天日期
   weeklyOffset: 0, // 週記回顧的週數偏移量 (0:當週, -1:上一週...)
-  currentUser: 'user_a', // 當前登入用戶 (模擬 User A / User B)
+  currentUser: null, // AUTH_INITIALIZING = null (Upgraded to user.uid on login or 'guest' in Guest mode)
   splashDismissed: false
 };
 
@@ -2196,6 +2196,10 @@ async function handleMemoSubmit() {
   const content = textarea.value.trim();
   if (!content && State.uploadedImages.length === 0) {
     alert('請填寫隨筆內容或上傳至少一張圖片。');
+    return;
+  if (!State.currentUser) {
+    console.warn("[Auth Race Protection] Blocked memo write because State.currentUser is null");
+    alert("請先完成登入後再進行隨筆操作。");
     return;
   }
 
