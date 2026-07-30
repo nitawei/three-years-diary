@@ -600,12 +600,16 @@
           }
         } catch (_) {}
 
+        const now = new Date();
+        const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24-hour expiration
+
         await window.db.collection('invitations').doc(pin).set({
           invitationId: pin,
           ownerUid: realAuthUid,
           ownerDisplayName: ownerDisplayName,
           status: 'pending',
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          expiresAt: firebase.firestore.Timestamp.fromDate(expires)
         });
         console.log(`[PARTNER DEBUG] generateInviteCode Success for PIN: ${pin} (ownerUid: ${realAuthUid})`);
         return pin;
