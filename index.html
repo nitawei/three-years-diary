@@ -438,7 +438,7 @@
              <h3 style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">個人資料</h3>
              <div style="display: flex; flex-direction: column; gap: var(--space-sm); margin-bottom: var(--space-lg); text-align: left;">
                <div>
-                 <label style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-text-main); display: block; margin-bottom: 6px; text-align: left;">暱稱：</label>
+                 <label style="font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-sub); display: block; margin-bottom: 6px; text-align: left;">✨ 暱稱：</label>
                  <div style="display: flex; gap: var(--space-xs); align-items: center; justify-content: flex-start;">
                    <input type="text" id="settings-name-input" maxlength="20" placeholder="請輸入暱稱..." style="flex: 1; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: var(--space-xs) var(--space-xl); font-size: var(--font-size-md); outline: none; background-color: var(--color-card-bg); color: var(--color-text-main); box-sizing: border-box; text-align: left;">
                    <button id="btn-save-settings-name" style="padding: var(--space-xs) var(--space-xl); background-color: var(--color-text-main); border: none; color: white; font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; transition: var(--transition-normal); white-space: nowrap;">儲存</button>
@@ -618,7 +618,10 @@
       <div class="memo-drawer-handle" id="btn-close-edit-diary" title="收起編輯"></div>
       <div class="memo-drawer-scroll" style="padding: var(--space-xl) var(--space-xl) 30px var(--space-xl); display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
         
-        <h3 class="drawer-section-title" id="edit-diary-drawer-title" style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-md); text-align: left;">編輯日記</h3>
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: var(--space-md); width: 100%;">
+          <h3 class="drawer-section-title" id="edit-diary-drawer-title" style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin: 0; text-align: left;">編輯日記</h3>
+          <span id="edit-diary-drawer-date" style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-sub); text-align: right;"></span>
+        </div>
         
         <!-- 日記編輯主要卡片 -->
         <div class="card diary-editor-card" style="box-shadow: none; border: 1px solid var(--color-border); margin-bottom: var(--space-lg); display: flex; flex-direction: column;">
