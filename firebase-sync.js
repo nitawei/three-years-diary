@@ -306,17 +306,9 @@
           console.log(`[Partnership Sync] Pair ${pairId} status disconnected or document deleted.`);
           currentPartnerId = null;
           currentConnectedAt = null;
-          stopPartnerDataListeners();
-          if (partnerId) await DiaryDB.clearUserData(partnerId);
-          if (window.loadTodayData) await window.loadTodayData();
-        }
-      }, (err) => {
-        console.error("[Partnership Sync] Subscription error:", err);
-      });
-  }
-
   let currentPairId = null;
   let currentSharingStartDate = null;
+  let activeListenersPartnerId = null;
 
   // Real-time Partner Info & Single Source of Truth Listener
   function startPartnerInfoListener(uid) {
@@ -325,6 +317,7 @@
     partnerUnsubscribe = window.db.collection('partnerships')
       .where('memberUids', 'array-contains', uid)
       .onSnapshot(async (querySnap) => {
+        const isServerConfirmed = !querySnap.metadata.hasPendingWrites;
         const activeDoc = querySnap.docs.find(doc => doc.data().status === 'active');
         if (activeDoc) {
           const data = activeDoc.data();
@@ -332,8 +325,7 @@
           const partnerId = data.memberUids.find(id => id !== uid);
           const sharingStartDate = data.sharingStartDate || TODAY_DATE_STR;
 
-          if (partnerId && (partnerId !== currentPartnerId || pairId !== currentPairId)) {
-            console.log("[Partnership Listener] Active partnership connected with partner:", partnerId, "pairId:", pairId);
+          if (partnerId) {
             currentPartnerId = partnerId;
             currentPairId = pairId;
             currentConnectedAt = data.createdAt;
@@ -345,16 +337,22 @@
             links[partnerId] = uid;
             localStorage.setItem('partner_links', JSON.stringify(links));
 
-            startPartnerDiariesListener(partnerId, sharingStartDate);
-            startPartnerMemosListener(partnerId, sharingStartDate);
-            startPartnerPublicProfileListener(partnerId);
+            // CRITICAL: Only launch child data listeners once partnership is Server-Confirmed
+            if (isServerConfirmed && activeListenersPartnerId !== partnerId) {
+              console.log("[Partnership Listener] Server-confirmed active partnership connected with partner:", partnerId, "pairId:", pairId);
+              activeListenersPartnerId = partnerId;
 
-            if (window.loadTodayData) await window.loadTodayData();
+              startPartnerDiariesListener(partnerId, sharingStartDate);
+              startPartnerMemosListener(partnerId, sharingStartDate);
+              startPartnerPublicProfileListener(partnerId);
+
+              if (window.loadTodayData) await window.loadTodayData();
+            }
           }
         } else {
-          if (currentPartnerId !== null) {
+          if (currentPartnerId !== null || activeListenersPartnerId !== null) {
             console.log("[Partnership Listener] Disconnected or no active partnership.");
-            const oldPartnerId = currentPartnerId;
+            const oldPartnerId = currentPartnerId || activeListenersPartnerId;
             currentPartnerId = null;
             currentPairId = null;
             currentConnectedAt = null;
@@ -372,7 +370,7 @@
           }
         }
       }, (err) => {
-        console.error("[Partnership Listener] Subscription error:", err);
+        console.error("[Partnership Sync] Subscription error:", err);
       });
   }
 
@@ -398,21 +396,86 @@
                 timestamp: timestampStr
               }, partnerId);
             } else {
-              console.log('[Partner Today Sync] Empty content, clearing local partner today diary:', TODAY_DATE_STR);
+              console.log('[Partner Today Sync] Document is empty for date:', TODAY_DATE_STR);
               await DiaryDB.deleteDiary(TODAY_DATE_STR, partnerId);
             }
           } else {
-            console.log('[Partner Today Sync] Document deleted or non-existent for date:', TODAY_DATE_STR);
+            console.log('[Partner Today Sync] Document does not exist for date:', TODAY_DATE_STR);
             await DiaryDB.deleteDiary(TODAY_DATE_STR, partnerId);
           }
-
           if (window.loadTodayData) await window.loadTodayData();
         } catch (err) {
-          console.error("[Partner Today Sync] Failed to process document snapshot:", err);
+          console.error('[Partner Today Sync] Error updating local cache:', err);
         }
       }, (err) => {
-        console.error("[Partner Today Listener] Realtime single document subscription error:", err);
+        console.warn("[Partner Today Sync] Subscription notice:", err);
       });
+  }
+
+  function startPartnerMemosListener(partnerId, sharingStartDate) {
+    if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
+
+    const todayDate = TODAY_DATE_STR;
+    partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos').doc(todayDate)
+      .onSnapshot(async (docSnap) => {
+        try {
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            const items = (data && Array.isArray(data.items)) ? data.items : [];
+            await DiaryDB.deleteMemosForDate(todayDate, partnerId);
+            for (const item of items) {
+              await DiaryDB.saveMemo(item, partnerId);
+            }
+            console.log(`[Partner Memos Today] Realtime update for date ${todayDate}: ${items.length} items synced`);
+          } else {
+            await DiaryDB.deleteMemosForDate(todayDate, partnerId);
+          }
+          if (window.loadTodayData) await window.loadTodayData();
+        } catch (err) {
+          console.error('[Partner Memos Today] Error saving partner memos to local DB:', err);
+        }
+      }, (err) => {
+        console.warn("[Partner Memos Today] Subscription notice:", err);
+      });
+  }
+
+  function startPartnerPublicProfileListener(partnerId) {
+    if (partnerPublicProfileUnsubscribe) partnerPublicProfileUnsubscribe();
+    if (!partnerId || partnerId === 'user_a' || partnerId === 'user_b' || !window.db) return;
+
+    console.log("[Partner Profile Sync] Subscribing to publicProfile for partner:", partnerId);
+    partnerPublicProfileUnsubscribe = window.db.collection('users').doc(partnerId)
+      .collection('publicProfile').doc('info')
+      .onSnapshot(async (doc) => {
+        let partnerName = '筆友';
+        if (doc.exists) {
+          const data = doc.data();
+          if (data && data.displayName && data.displayName.trim()) {
+            partnerName = data.displayName.trim();
+          }
+        }
+        console.log("[Partner Profile Sync] Realtime partner displayName update received:", partnerName);
+        
+        await DiaryDB.saveUser({
+          id: partnerId,
+          displayName: partnerName,
+          updatedAt: new Date().toISOString()
+        });
+
+        if (window.updatePartnerDisplayNamesInUI) {
+          window.updatePartnerDisplayNamesInUI(partnerName);
+        }
+        if (window.loadTodayData) await window.loadTodayData();
+      }, (err) => {
+        console.warn("[Partner Profile Sync] Public profile listener notice:", err);
+      });
+  }
+
+  function stopPartnerDataListeners() {
+    activeListenersPartnerId = null;
+    if (partnerDiariesUnsubscribe) { partnerDiariesUnsubscribe(); partnerDiariesUnsubscribe = null; }
+    if (partnerMemosUnsubscribe) { partnerMemosUnsubscribe(); partnerMemosUnsubscribe = null; }
+    if (partnerPublicProfileUnsubscribe) { partnerPublicProfileUnsubscribe(); partnerPublicProfileUnsubscribe = null; }
   }
 
   // PATH B — Partner History: Firestore Source of Truth -> Update IndexedDB Cache -> Offline Fallback
