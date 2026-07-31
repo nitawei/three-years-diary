@@ -491,9 +491,26 @@ function updateSettingsProfileUI(user) {
         return;
       }
       
-      user.displayName = rawVal.trim();
-      user.updatedAt = new Date().toISOString();
+      const newName = rawVal.trim();
+      const updatedAt = new Date().toISOString();
+      user.displayName = newName;
+      user.updatedAt = updatedAt;
+      
       await DiaryDB.saveUser(user);
+
+      // Up-sync to Cloud Firestore users/{uid} document
+      try {
+        if (window.db && user.id && user.id !== 'guest') {
+          await window.db.collection('users').doc(user.id).set({
+            displayName: newName,
+            updatedAt: updatedAt
+          }, { merge: true });
+          console.log("[Settings] Firestore displayName successfully synced:", newName);
+        }
+      } catch (fsErr) {
+        console.warn("[Settings] Firestore displayName sync notice:", fsErr);
+      }
+
       await fetchCurrentUserObj();
       alert('🎉 暱稱已成功更新！');
     };
@@ -1903,19 +1920,28 @@ function setupEventListeners() {
           if (userCred && userCred.user) {
             const uid = userCred.user.uid;
             const email = userCred.user.email || '';
-            const displayName = userCred.user.displayName || (email ? email.split('@')[0] : '筆友');
-            console.log("[Firebase Auth] Google login successful:", uid);
-
-            // 1. Synchronously set session in LocalStorage
-            setSession(uid, email, 'google');
-            if (window.setSessionCompat) {
-              window.setSessionCompat(uid, email, 'google');
+            // Check if profile exists in Firestore to preserve 1095 nickname
+            let activeDisplayName = userCred.user.displayName || (email ? email.split('@')[0] : '筆友');
+            try {
+              if (window.db) {
+                const userDoc = await window.db.collection('users').doc(uid).get();
+                if (userDoc.exists && userDoc.data().displayName) {
+                  activeDisplayName = userDoc.data().displayName;
+                } else {
+                  await window.db.collection('users').doc(uid).set({
+                    displayName: activeDisplayName,
+                    createdAt: new Date().toISOString(),
+                    startedAt: TODAY_DATE_STR
+                  }, { merge: true });
+                }
+              }
+            } catch (fsErr) {
+              console.warn("[Firebase Auth] Firestore user profile sync notice:", fsErr);
             }
 
-            // 2. Synchronously save user profile into IndexedDB
             const userObj = {
               id: uid,
-              displayName: displayName,
+              displayName: activeDisplayName,
               email: email,
               provider: 'google',
               createdAt: new Date().toISOString(),
@@ -1923,19 +1949,6 @@ function setupEventListeners() {
               startedAt: TODAY_DATE_STR
             };
             await DiaryDB.saveUser(userObj);
-
-            // 3. Save profile to Firestore
-            try {
-              if (window.db) {
-                await window.db.collection('users').doc(uid).set({
-                  displayName: displayName,
-                  createdAt: new Date().toISOString(),
-                  startedAt: TODAY_DATE_STR
-                }, { merge: true });
-              }
-            } catch (fsErr) {
-              console.warn("[Firebase Auth] Firestore user profile sync notice:", fsErr);
-            }
 
             // 4. Update State and render TODAY page immediately
             State.currentUser = uid;
