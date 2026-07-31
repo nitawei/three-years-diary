@@ -2927,12 +2927,13 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
       };
     }
     
-    // 載入並渲染伴侶日記 (若已配對且夥伴當天有寫日記)
-    const partnerId = window.PartnerService.getPartnerId(State.currentUser);
+    // 載入並渲染伴侶日記 (若已配對、授權開始日成立且夥伴當天有寫日記)
+    const partnerId = window.PartnerService ? window.PartnerService.getPartnerId(State.currentUser) : null;
+    const sharingStartDate = window.PartnerService ? window.PartnerService.getSharingStartDate(State.currentUser) : null;
     const modalPartnerCard = document.getElementById('modal-partner-notebook-card');
     if (modalPartnerCard) {
-      if (partnerId) {
-        const partnerDiary = await DiaryDB.getDiary(dateStr, partnerId);
+      if (partnerId && sharingStartDate && window.getPartnerDiaryByDate) {
+        const partnerDiary = await window.getPartnerDiaryByDate(partnerId, dateStr, sharingStartDate);
         if (partnerDiary && typeof partnerDiary.content === 'string' && partnerDiary.content.trim()) {
           const partnerText = document.getElementById('modal-partner-notebook-text');
           const partnerMeta = document.getElementById('modal-partner-notebook-meta');
@@ -2952,7 +2953,6 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
               const reviewMemoTitle = document.getElementById('review-memo-title');
               if (reviewMemoDrawer && reviewMemoTitle) {
                 reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
-                const sharingStartDate = window.PartnerService ? window.PartnerService.getSharingStartDate(State.currentUser) : null;
                 const partnerMemos = await window.getPartnerMemosByDate(partnerId, dateStr, sharingStartDate);
                 renderReviewMemoTimeline(partnerMemos);
                 reviewMemoDrawer.classList.remove('hidden');
