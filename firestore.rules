@@ -122,10 +122,10 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // 7. 公開 Profile 資訊 (僅放 displayName，僅限 Owner 讀寫 & Active Partner 讀取)
+    // 7. 公開 Profile 資訊 (僅放 displayName，Owner 讀寫 & 已登入使用者公開唯讀以供邀請預覽)
     match /users/{userId}/publicProfile/{docId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      allow read: if request.auth != null && isPartner(request.auth.uid, userId);
+      allow read: if request.auth != null;
     }
   }
 }

@@ -49,28 +49,49 @@
       if (window.State) window.State.currentUser = user.uid;
       else if (typeof State !== 'undefined') State.currentUser = user.uid;
       
-      // Check if user has profile in Firestore
+      // Check and ensure user profile and publicProfile in Firestore
       try {
-        let userDoc = await window.db.collection('users').doc(user.uid).get();
+        const userRef = window.db.collection('users').doc(user.uid);
+        let userDoc = await userRef.get();
+        const autoName = user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
+        
         if (!userDoc.exists) {
-          const autoName = user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
           console.log("[Firebase Auth] Initializing missing user profile for Google user:", autoName);
-          await window.db.collection('users').doc(user.uid).set({
+          await userRef.set({
             displayName: autoName,
             createdAt: new Date().toISOString(),
             startedAt: TODAY_DATE_STR
           }, { merge: true });
-          userDoc = await window.db.collection('users').doc(user.uid).get();
+          userDoc = await userRef.get();
         }
 
         const profile = userDoc.exists ? userDoc.data() : {};
-        const displayName = profile.displayName || user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
-        console.log("[Firebase Auth] User profile active:", displayName);
+        const displayName = (profile.displayName && profile.displayName.trim()) ? profile.displayName.trim() : autoName;
+
+        // Ensure publicProfile/info exists (Migration for existing users & initialization for new users)
+        const pubRef = userRef.collection('publicProfile').doc('info');
+        let pubDoc = await pubRef.get();
+        if (!pubDoc.exists) {
+          console.log("[Firebase Auth] Creating/migrating publicProfile for user:", displayName);
+          await pubRef.set({
+            displayName: displayName,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } else {
+          // If publicProfile exists, do NOT overwrite with Google Auth displayName!
+          const pubData = pubDoc.data();
+          if (pubData && pubData.displayName && pubData.displayName.trim()) {
+            profile.displayName = pubData.displayName.trim();
+          }
+        }
+
+        const finalDisplayName = (profile.displayName && profile.displayName.trim()) ? profile.displayName.trim() : displayName;
+        console.log("[Firebase Auth] User profile & publicProfile active:", finalDisplayName);
         
         // Save user profile locally to IndexedDB
         await DiaryDB.saveUser({
           id: user.uid,
-          displayName: displayName,
+          displayName: finalDisplayName,
           email: user.email,
           provider: 'google',
           createdAt: profile.createdAt || new Date().toISOString(),
@@ -529,23 +550,29 @@
     partnerPublicProfileUnsubscribe = window.db.collection('users').doc(partnerId)
       .collection('publicProfile').doc('info')
       .onSnapshot(async (doc) => {
+        let partnerName = '筆友';
         if (doc.exists) {
           const data = doc.data();
-          const partnerName = data.displayName || '筆友';
-          console.log("[Partner Profile Sync] Realtime partner displayName update received:", partnerName);
-          
-          await DiaryDB.saveUser({
-            id: partnerId,
-            displayName: partnerName,
-            updatedAt: new Date().toISOString()
-          });
-
-          if (window.updatePartnerDisplayNamesInUI) {
-            window.updatePartnerDisplayNamesInUI(partnerName);
+          if (data && data.displayName && data.displayName.trim()) {
+            partnerName = data.displayName.trim();
           }
+        }
+        console.log("[Partner Profile Sync] Realtime partner displayName update received:", partnerName);
+        
+        await DiaryDB.saveUser({
+          id: partnerId,
+          displayName: partnerName,
+          updatedAt: new Date().toISOString()
+        });
+
+        if (window.updatePartnerDisplayNamesInUI) {
+          window.updatePartnerDisplayNamesInUI(partnerName);
         }
       }, (err) => {
         console.warn("[Partner Profile Sync] Public profile listener notice:", err);
+        if (window.updatePartnerDisplayNamesInUI) {
+          window.updatePartnerDisplayNamesInUI('筆友');
+        }
       });
   }
 
@@ -652,11 +679,19 @@
 
         let inviterName = '筆友';
         try {
-          const userDoc = await window.db.collection('users').doc(inviteOwnerUid).get();
-          if (userDoc.exists && userDoc.data().displayName) {
-            inviterName = userDoc.data().displayName;
+          const pubDoc = await window.db.collection('users').doc(inviteOwnerUid).collection('publicProfile').doc('info').get();
+          if (pubDoc.exists && pubDoc.data().displayName && pubDoc.data().displayName.trim()) {
+            inviterName = pubDoc.data().displayName.trim();
+          } else {
+            // Fallback for local/mock users
+            const userDoc = await window.db.collection('users').doc(inviteOwnerUid).get();
+            if (userDoc.exists && userDoc.data().displayName && userDoc.data().displayName.trim()) {
+              inviterName = userDoc.data().displayName.trim();
+            }
           }
-        } catch (_) {}
+        } catch (err) {
+          console.warn('[PARTNER PREVIEW] Could not fetch publicProfile for owner:', inviteOwnerUid, err);
+        }
 
         return {
           valid: true,
