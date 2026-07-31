@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'ThreeYearDiaryDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 class DiaryDB {
   static useLocalStorage = false;
@@ -22,31 +22,101 @@ class DiaryDB {
       try {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
+        request.onblocked = () => {
+          console.warn('[IndexedDB Upgrade Blocked] Please close other tabs of this app.');
+        };
+
         request.onerror = () => {
           console.warn('IndexedDB open failed, switching to LocalStorage.', request.error);
           this.useLocalStorage = true;
           reject(request.error);
         };
 
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+          const db = request.result;
+          db.onversionchange = () => {
+            console.warn('[IndexedDB Versionchange] Database version changed, closing stale connection.');
+            db.close();
+          };
+          resolve(db);
+        };
 
         request.onupgradeneeded = (e) => {
           const db = request.result;
+          const oldVersion = e.oldVersion;
+          const transaction = e.target.transaction;
 
           // 1. 日記 Store：以日期為 Key (YYYY-MM-DD)
           if (!db.objectStoreNames.contains('diaries')) {
             db.createObjectStore('diaries', { keyPath: 'date' });
           }
 
-          // 2. 備忘錄 Store：自動生成自增 ID，建立 date 索引方便查詢單日所有隨筆
-          if (!db.objectStoreNames.contains('memos')) {
-            const memoStore = db.createObjectStore('memos', { keyPath: 'id', autoIncrement: true });
-            memoStore.createIndex('date', 'date', { unique: false });
-          }
-
-          // 3. 使用者 Store：以 id 為 Key
+          // 2. 使用者 Store：以 id 為 Key
           if (!db.objectStoreNames.contains('users')) {
             db.createObjectStore('users', { keyPath: 'id' });
+          }
+
+          // 3. 備忘錄 Store v2 升級 (二元複合主鍵 ['userId', 'id'])
+          if (oldVersion < 6) {
+            let v2Store;
+            if (!db.objectStoreNames.contains('memos_v2')) {
+              v2Store = db.createObjectStore('memos_v2', { keyPath: ['userId', 'id'] });
+              v2Store.createIndex('date', 'date', { unique: false });
+              v2Store.createIndex('userId_date', ['userId', 'date'], { unique: false });
+            } else {
+              v2Store = transaction.objectStore('memos_v2');
+            }
+
+            let quarantineStore;
+            if (!db.objectStoreNames.contains('memos_quarantine')) {
+              quarantineStore = db.createObjectStore('memos_quarantine', { keyPath: 'quarantine_id', autoIncrement: true });
+            } else {
+              quarantineStore = transaction.objectStore('memos_quarantine');
+            }
+
+            // 搬移舊 memos store 中的紀錄
+            if (db.objectStoreNames.contains('memos')) {
+              const oldStore = transaction.objectStore('memos');
+              const cursorReq = oldStore.openCursor();
+
+              cursorReq.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                  const record = cursor.value;
+
+                  // 嚴格判定：100% 具備非空 userId 且 date 為合規 YYYY-MM-DD
+                  const hasValidUserId = record && record.userId && typeof record.userId === 'string' && record.userId.trim() !== '';
+                  const hasValidDate = record && record.date && typeof record.date === 'string' && record.date.match(/^\d{4}-\d{2}-\d{2}$/);
+
+                  if (hasValidUserId && hasValidDate) {
+                    const numId = Number(record.id);
+                    const validId = (!isNaN(numId) && String(numId) === String(record.id)) ? numId : (record.id || Date.now());
+                    v2Store.put({
+                      id: validId,
+                      userId: record.userId.trim(),
+                      date: record.date.trim(),
+                      time: record.time || '00:00',
+                      content: record.content || '',
+                      images: Array.isArray(record.images) ? record.images : []
+                    });
+                  } else {
+                    console.warn('[DB Migration Quarantine] Isolating record with missing identity/date:', record);
+                    quarantineStore.put({
+                      migrationVersion: 6,
+                      originalStore: 'memos',
+                      originalKey: record ? record.id : null,
+                      reason: (!hasValidUserId ? 'MISSING_USER_ID' : 'MISSING_DATE'),
+                      quarantinedAt: new Date().toISOString(),
+                      originalRecord: record || null
+                    });
+                  }
+                  cursor.continue();
+                } else {
+                  console.log('[DB Migration] All old memo records migrated. Deleting legacy memos store.');
+                  db.deleteObjectStore('memos');
+                }
+              };
+            }
           }
         };
       } catch (err) {
@@ -214,14 +284,14 @@ class DiaryDB {
       const memos = await this.getMemosForDate(date, userId);
       if (memos.length === 0) return true;
 
-      const transaction = db.transaction('memos', 'readwrite');
-      const store = transaction.objectStore('memos');
+      const transaction = db.transaction('memos_v2', 'readwrite');
+      const store = transaction.objectStore('memos_v2');
       
       await Promise.all(memos.map(memo => {
         return new Promise((resolve, reject) => {
           const numId = Number(memo.id);
           const validKey = (!isNaN(numId) && String(numId) === String(memo.id)) ? numId : memo.id;
-          const req = store.delete(validKey);
+          const req = store.delete([userId, validKey]);
           req.onsuccess = () => resolve();
           req.onerror = () => reject(req.error);
         });
@@ -281,14 +351,13 @@ class DiaryDB {
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
-        const transaction = db.transaction('memos', 'readonly');
-        const store = transaction.objectStore('memos');
-        const index = store.index('date');
-        const request = index.getAll(date);
+        const transaction = db.transaction('memos_v2', 'readonly');
+        const store = transaction.objectStore('memos_v2');
+        const index = store.index('userId_date');
+        const request = index.getAll([userId, date]);
 
         request.onsuccess = () => {
           let results = request.result || [];
-          results = results.filter(m => m.userId === userId);
           results.sort((a, b) => b.id - a.id);
           resolve(results);
         };
@@ -313,15 +382,23 @@ class DiaryDB {
 
   static async saveMemo(memo, userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for saveMemo");
-    const record = { ...memo, userId: memo.userId || userId };
+    const validUserId = memo.userId || userId;
+    let validId = memo.id;
+    if (validId === undefined || validId === null || validId === '') {
+      validId = Date.now();
+    } else {
+      const numId = Number(validId);
+      if (!isNaN(numId) && String(numId) === String(validId)) validId = numId;
+    }
+    const record = { ...memo, id: validId, userId: validUserId };
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
-        const transaction = db.transaction('memos', 'readwrite');
-        const store = transaction.objectStore('memos');
+        const transaction = db.transaction('memos_v2', 'readwrite');
+        const store = transaction.objectStore('memos_v2');
         const request = store.put(record);
 
-        transaction.oncomplete = () => resolve(request.result);
+        transaction.oncomplete = () => resolve(record.id);
         transaction.onerror = () => reject(transaction.error || request.error);
       });
     } catch (err) {
@@ -330,11 +407,11 @@ class DiaryDB {
       try {
         const memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
         if (record.id) {
-          const idx = memos.findIndex(m => m.id === record.id);
+          const idx = memos.findIndex(m => String(m.id) === String(record.id) && m.userId === record.userId);
           if (idx !== -1) memos[idx] = record;
+          else memos.push(record);
         } else {
-          const nextId = memos.reduce((max, m) => Math.max(max, m.id || 0), 0) + 1;
-          record.id = nextId;
+          record.id = Date.now();
           memos.push(record);
         }
         localStorage.setItem('diary_memos', JSON.stringify(memos));
@@ -342,11 +419,11 @@ class DiaryDB {
       } catch (lsErr) {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
         if (record.id) {
-          const idx = this.memoryMemos.findIndex(m => m.id === record.id);
+          const idx = this.memoryMemos.findIndex(m => String(m.id) === String(record.id) && m.userId === record.userId);
           if (idx !== -1) this.memoryMemos[idx] = record;
+          else this.memoryMemos.push(record);
         } else {
-          const nextId = this.memoryMemos.reduce((max, m) => Math.max(max, m.id || 0), 0) + 1;
-          record.id = nextId;
+          record.id = Date.now();
           this.memoryMemos.push(record);
         }
         return record.id;
@@ -360,10 +437,18 @@ class DiaryDB {
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
-        const transaction = db.transaction('memos', 'readwrite');
-        const store = transaction.objectStore('memos');
+        const transaction = db.transaction('memos_v2', 'readwrite');
+        const store = transaction.objectStore('memos_v2');
         for (const memo of memosArray) {
-          store.put({ ...memo, userId: memo.userId || userId });
+          const validUserId = memo.userId || userId;
+          let validId = memo.id;
+          if (validId === undefined || validId === null || validId === '') {
+            validId = Date.now();
+          } else {
+            const numId = Number(validId);
+            if (!isNaN(numId) && String(numId) === String(validId)) validId = numId;
+          }
+          store.put({ ...memo, id: validId, userId: validUserId });
         }
         transaction.oncomplete = () => resolve(true);
         transaction.onerror = () => reject(transaction.error);
@@ -376,16 +461,17 @@ class DiaryDB {
     }
   }
 
-  static async deleteMemo(id) {
+  static async deleteMemo(id, userId) {
     if (id === undefined || id === null) return true;
+    if (!userId) throw new Error("[DiaryDB] userId is required for deleteMemo");
     const numId = Number(id);
-    const validKey = (!isNaN(numId) && String(numId) === String(id)) ? numId : id;
+    const validId = (!isNaN(numId) && String(numId) === String(id)) ? numId : id;
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
-        const transaction = db.transaction('memos', 'readwrite');
-        const store = transaction.objectStore('memos');
-        const request = store.delete(validKey);
+        const transaction = db.transaction('memos_v2', 'readwrite');
+        const store = transaction.objectStore('memos_v2');
+        const request = store.delete([userId, validId]);
 
         request.onsuccess = () => resolve(true);
         request.onerror = () => reject(request.error);
@@ -395,12 +481,12 @@ class DiaryDB {
       this.useLocalStorage = true;
       try {
         let memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
-        memos = memos.filter(m => String(m.id) !== String(id));
+        memos = memos.filter(m => !(String(m.id) === String(id) && m.userId === userId));
         localStorage.setItem('diary_memos', JSON.stringify(memos));
         return true;
       } catch (lsErr) {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
-        this.memoryMemos = this.memoryMemos.filter(m => String(m.id) !== String(id));
+        this.memoryMemos = this.memoryMemos.filter(m => !(String(m.id) === String(id) && m.userId === userId));
         return true;
       }
     }

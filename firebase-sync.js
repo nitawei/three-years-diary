@@ -255,7 +255,7 @@
           const localIdStr = String(localMemo.id);
           if (!remoteIds.has(localIdStr) || localIdStr === dateStr || localMemo.content === undefined) {
             console.log(`[Sync Reconciliation] Deleting stale/phantom local memo ${localMemo.id} for date ${dateStr}`);
-            await DiaryDB.deleteMemo(localMemo.id);
+            await DiaryDB.deleteMemo(localMemo.id, localMemo.userId || uid);
           }
         }
 
