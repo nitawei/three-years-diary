@@ -966,10 +966,22 @@ async function loadTodayData() {
 
 async function renderMemoTimeline() {
   const timelineList = document.getElementById('memo-timeline-list');
-  if (!timelineList) return;
+  if (!timelineList || !State.currentUser) return;
+
+  const rawMemos = await DiaryDB.getMemosForDate(State.activeDate, State.currentUser);
+
+  // Deduplicate memos by unique ID or time+content signature
+  const seen = new Set();
+  const memos = [];
+  (rawMemos || []).forEach(m => {
+    const key = (m.id !== undefined && m.id !== null) ? String(m.id) : `${m.time}_${m.content}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      memos.push(m);
+    }
+  });
 
   timelineList.innerHTML = '';
-  const memos = await DiaryDB.getMemosForDate(State.activeDate, State.currentUser);
 
   if (memos.length === 0) {
     timelineList.innerHTML = '<p class="empty-state">今天還沒有寫下隨筆記錄。</p>';

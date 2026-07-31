@@ -219,7 +219,9 @@ class DiaryDB {
       
       await Promise.all(memos.map(memo => {
         return new Promise((resolve, reject) => {
-          const req = store.delete(Number(memo.id));
+          const numId = Number(memo.id);
+          const validKey = (!isNaN(numId) && String(numId) === String(memo.id)) ? numId : memo.id;
+          const req = store.delete(validKey);
           req.onsuccess = () => resolve();
           req.onerror = () => reject(req.error);
         });
