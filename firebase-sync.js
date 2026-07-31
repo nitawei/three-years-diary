@@ -210,18 +210,39 @@
         }, uid);
       });
 
-      // Sync memos
+      // Sync memos with precise reconciliation per daily document
       const memosSnap = await window.db.collection('users').doc(uid).collection('memos').get();
-      memosSnap.forEach(async (doc) => {
-        const data = doc.data();
-        await DiaryDB.saveMemo({
-          id: Number(doc.id) || doc.id,
-          date: data.date,
-          time: data.time || '00:00',
-          content: data.content,
-          images: data.images || []
-        }, uid);
-      });
+      for (const doc of memosSnap.docs) {
+        const dateStr = doc.id;
+        const data = doc.data() || {};
+        const remoteItems = Array.isArray(data.items) ? data.items : [];
+
+        // 1. Fetch existing local memos for this date
+        const localMemos = await DiaryDB.getMemosForDate(dateStr, uid);
+        const remoteIds = new Set(remoteItems.map(item => String(item.id)));
+
+        // 2. Reconciliation: Remove stale/orphan local records (or phantom records with dateStr ID / undefined content)
+        for (const localMemo of localMemos) {
+          const localIdStr = String(localMemo.id);
+          if (!remoteIds.has(localIdStr) || localIdStr === dateStr || localMemo.content === undefined) {
+            console.log(`[Sync Reconciliation] Deleting stale/phantom local memo ${localMemo.id} for date ${dateStr}`);
+            await DiaryDB.deleteMemo(localMemo.id);
+          }
+        }
+
+        // 3. Upsert remote items into IndexedDB
+        for (const item of remoteItems) {
+          if (item && (item.id !== undefined && item.id !== null)) {
+            await DiaryDB.saveMemo({
+              id: item.id,
+              date: dateStr,
+              time: item.time || '00:00',
+              content: item.content || '',
+              images: item.images || []
+            }, uid);
+          }
+        }
+      }
       console.log("[Sync] User data downloaded successfully.");
     } catch (err) {
       console.error("[Sync] Error syncing from Firestore:", err);
