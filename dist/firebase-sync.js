@@ -335,8 +335,14 @@
 
     partnerUnsubscribe = window.db.collection('partnerships')
       .where('memberUids', 'array-contains', uid)
-      .onSnapshot(async (querySnap) => {
+      .onSnapshot({ includeMetadataChanges: true }, async (querySnap) => {
         const isServerConfirmed = !querySnap.metadata.hasPendingWrites;
+        console.log("[Partnership Listener] Snapshot received:", {
+          hasPendingWrites: querySnap.metadata.hasPendingWrites,
+          isServerConfirmed: isServerConfirmed,
+          fromCache: querySnap.metadata.fromCache,
+          docsCount: querySnap.docs.length
+        });
         const activeDoc = querySnap.docs.find(doc => doc.data().status === 'active');
         if (activeDoc) {
           const data = activeDoc.data();
