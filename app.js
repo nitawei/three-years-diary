@@ -1667,7 +1667,7 @@ function setupEventListeners() {
           alert(`聯結成功！現在可以開始查看${partnerName}的今日日記。`);
           pinInput.value = '';
           if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
-          if (window.loadTodayData) await window.loadTodayData();
+          // Realtime listeners (startPartnerInfoListener -> startPartnerDiariesListener / startPartnerMemosListener) handle UI hydration automatically upon partnership activation
         }
       } catch (err) {
         console.error('[PARTNER ACCEPT ERROR]', err);
