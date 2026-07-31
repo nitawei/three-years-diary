@@ -505,7 +505,11 @@ function updateSettingsProfileUI(user) {
             displayName: newName,
             updatedAt: updatedAt
           }, { merge: true });
-          console.log("[Settings] Firestore displayName successfully synced:", newName);
+          await window.db.collection('users').doc(user.id).collection('publicProfile').doc('info').set({
+            displayName: newName,
+            updatedAt: updatedAt
+          }, { merge: true });
+          console.log("[Settings] Firestore displayName and publicProfile successfully synced:", newName);
         }
       } catch (fsErr) {
         console.warn("[Settings] Firestore displayName sync notice:", fsErr);
@@ -526,10 +530,39 @@ async function getPartnerName() {
     if (partnerUser && partnerUser.displayName) {
       return partnerUser.displayName;
     }
-    return partnerId === 'user_a' ? 'User A' : (partnerId === 'user_b' ? 'User B' : partnerId);
+    if (window.db && partnerId !== 'user_a' && partnerId !== 'user_b') {
+      try {
+        const pubDoc = await window.db.collection('users').doc(partnerId).collection('publicProfile').doc('info').get();
+        if (pubDoc.exists && pubDoc.data().displayName) {
+          const name = pubDoc.data().displayName;
+          await DiaryDB.saveUser({ id: partnerId, displayName: name, updatedAt: new Date().toISOString() });
+          return name;
+        }
+      } catch (_) {}
+    }
+    return partnerId === 'user_a' ? 'User A' : (partnerId === 'user_b' ? 'User B' : '筆友');
   }
   return '筆友';
 }
+
+function updatePartnerDisplayNamesInUI(partnerName) {
+  if (!partnerName) return;
+
+  const partnerHeaderTitle = document.querySelector('#partner-page .section-title');
+  if (partnerHeaderTitle) {
+    partnerHeaderTitle.textContent = `${partnerName} 的這一天`;
+  }
+  const partnerMemoTitle = document.querySelector('#partner-page .memo-section-title');
+  if (partnerMemoTitle) {
+    partnerMemoTitle.textContent = `${partnerName} 的今日隨筆`;
+  }
+
+  const drawerTitle = document.getElementById('memo-drawer-title');
+  if (drawerTitle && !drawerTitle.classList.contains('hidden')) {
+    drawerTitle.textContent = `${partnerName} 的隨筆`;
+  }
+}
+window.updatePartnerDisplayNamesInUI = updatePartnerDisplayNamesInUI;
 
 // 伴侶日記分享 服務 (優先委派至 Firestore 實體服務)
 const PartnerService = {

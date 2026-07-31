@@ -12,6 +12,11 @@ service cloud.firestore {
         date >= get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.sharingStartDate;
     }
 
+    function isPartner(uidA, uidB) {
+      return get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.status == 'active' &&
+        uidA in get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.memberUids;
+    }
+
     function isPartnerMemoActive(uidA, uidB, date) {
       return get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.status == 'active' &&
         uidA in get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.memberUids &&
@@ -112,6 +117,12 @@ service cloud.firestore {
     // 6. 個人 Profile 檔案 (100% 私有隔離)
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 7. 公開 Profile 資訊 (僅放 displayName，僅限 Owner 讀寫 & Active Partner 讀取)
+    match /users/{userId}/publicProfile/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow get: if request.auth != null && isPartner(request.auth.uid, userId);
     }
   }
 }

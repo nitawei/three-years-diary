@@ -305,6 +305,7 @@
 
             startPartnerDiariesListener(partnerId, sharingStartDate);
             startPartnerMemosListener(partnerId, sharingStartDate);
+            startPartnerPublicProfileListener(partnerId);
 
             if (window.loadTodayData) await window.loadTodayData();
           }
@@ -497,9 +498,40 @@
       });
   }
 
+  let partnerPublicProfileUnsubscribe = null;
+
+  function startPartnerPublicProfileListener(partnerId) {
+    if (partnerPublicProfileUnsubscribe) partnerPublicProfileUnsubscribe();
+    if (!partnerId || partnerId === 'user_a' || partnerId === 'user_b' || !window.db) return;
+
+    console.log("[Partner Profile Sync] Subscribing to publicProfile for partner:", partnerId);
+    partnerPublicProfileUnsubscribe = window.db.collection('users').doc(partnerId)
+      .collection('publicProfile').doc('info')
+      .onSnapshot(async (doc) => {
+        if (doc.exists) {
+          const data = doc.data();
+          const partnerName = data.displayName || '筆友';
+          console.log("[Partner Profile Sync] Realtime partner displayName update received:", partnerName);
+          
+          await DiaryDB.saveUser({
+            id: partnerId,
+            displayName: partnerName,
+            updatedAt: new Date().toISOString()
+          });
+
+          if (window.updatePartnerDisplayNamesInUI) {
+            window.updatePartnerDisplayNamesInUI(partnerName);
+          }
+        }
+      }, (err) => {
+        console.warn("[Partner Profile Sync] Public profile listener notice:", err);
+      });
+  }
+
   function stopPartnerDataListeners() {
     if (partnerDiariesUnsubscribe) { partnerDiariesUnsubscribe(); partnerDiariesUnsubscribe = null; }
     if (partnerMemosUnsubscribe) { partnerMemosUnsubscribe(); partnerMemosUnsubscribe = null; }
+    if (partnerPublicProfileUnsubscribe) { partnerPublicProfileUnsubscribe(); partnerPublicProfileUnsubscribe = null; }
   }
 
   // Override SyncManager queue loop to upload to Firestore
