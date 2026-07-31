@@ -432,8 +432,8 @@
             const data = docSnap.data();
             const items = (data && Array.isArray(data.items)) ? data.items : [];
             await DiaryDB.deleteMemosForDate(todayDate, partnerId);
-            for (const item of items) {
-              await DiaryDB.saveMemo(item, partnerId);
+            if (items.length > 0) {
+              await DiaryDB.saveMemos(items, partnerId);
             }
             console.log(`[Partner Memos Today] Realtime update for date ${todayDate}: ${items.length} items synced`);
           } else {

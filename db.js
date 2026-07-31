@@ -321,8 +321,8 @@ class DiaryDB {
         const store = transaction.objectStore('memos');
         const request = store.put(record);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => resolve(request.result);
+        transaction.onerror = () => reject(transaction.error || request.error);
       });
     } catch (err) {
       console.warn('saveMemo IndexedDB failed, trying LocalStorage:', err);
@@ -330,13 +330,9 @@ class DiaryDB {
       try {
         const memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
         if (record.id) {
-          // 更新 (Edit)
           const idx = memos.findIndex(m => m.id === record.id);
-          if (idx !== -1) {
-            memos[idx] = record;
-          }
+          if (idx !== -1) memos[idx] = record;
         } else {
-          // 新增 (Create)
           const nextId = memos.reduce((max, m) => Math.max(max, m.id || 0), 0) + 1;
           record.id = nextId;
           memos.push(record);
@@ -346,19 +342,37 @@ class DiaryDB {
       } catch (lsErr) {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
         if (record.id) {
-          // 更新 (Edit)
           const idx = this.memoryMemos.findIndex(m => m.id === record.id);
-          if (idx !== -1) {
-            this.memoryMemos[idx] = record;
-          }
+          if (idx !== -1) this.memoryMemos[idx] = record;
         } else {
-          // 新增 (Create)
           const nextId = this.memoryMemos.reduce((max, m) => Math.max(max, m.id || 0), 0) + 1;
           record.id = nextId;
           this.memoryMemos.push(record);
         }
         return record.id;
       }
+    }
+  }
+
+  static async saveMemos(memosArray, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for saveMemos");
+    if (!Array.isArray(memosArray) || memosArray.length === 0) return true;
+    try {
+      const db = await this.open();
+      return await new Promise((resolve, reject) => {
+        const transaction = db.transaction('memos', 'readwrite');
+        const store = transaction.objectStore('memos');
+        for (const memo of memosArray) {
+          store.put({ ...memo, userId: memo.userId || userId });
+        }
+        transaction.oncomplete = () => resolve(true);
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } catch (err) {
+      for (const memo of memosArray) {
+        await this.saveMemo(memo, userId);
+      }
+      return true;
     }
   }
 

@@ -903,9 +903,11 @@ async function loadTodayData() {
     const panelUnlinked = document.getElementById('partner-unlinked-panel');
     const panelInviteGen = document.getElementById('partner-invite-gen-panel');
     const panelInviteInput = document.getElementById('partner-invite-input-panel');
+    const panelInvitePreview = document.getElementById('partner-invite-preview-panel');
     const panelPaired = document.getElementById('partner-paired-panel');
     
     if (partnerStatusTag && panelUnlinked && panelInviteGen && panelInviteInput && panelPaired) {
+      if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
       if (!partnerId) {
         // 未聯結 / 已解除配對狀態
         partnerStatusTag.textContent = '尚未聯結';
@@ -945,6 +947,7 @@ async function loadTodayData() {
         panelUnlinked.classList.add('hidden');
         panelInviteGen.classList.add('hidden');
         panelInviteInput.classList.add('hidden');
+        if (panelInvitePreview) panelInvitePreview.classList.add('hidden');
         panelPaired.classList.remove('hidden');
         
         // 載入伴侶日記
