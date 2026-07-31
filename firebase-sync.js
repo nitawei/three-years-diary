@@ -306,6 +306,15 @@
           console.log(`[Partnership Sync] Pair ${pairId} status disconnected or document deleted.`);
           currentPartnerId = null;
           currentConnectedAt = null;
+          stopPartnerDataListeners();
+          if (partnerId) await DiaryDB.clearUserData(partnerId);
+          if (window.loadTodayData) await window.loadTodayData();
+        }
+      }, (err) => {
+        console.error("[Partnership Sync] Subscription error:", err);
+      });
+  }
+
   let currentPairId = null;
   let currentSharingStartDate = null;
   let activeListenersPartnerId = null;
