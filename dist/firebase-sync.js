@@ -236,7 +236,15 @@
       for (const doc of memosSnap.docs) {
         const dateStr = doc.id;
         const data = doc.data() || {};
-        const remoteItems = Array.isArray(data.items) ? data.items : [];
+        
+        // CRITICAL: Only process Phase 2 daily documents (where data.items is an Array)
+        // Ignore Phase 1 legacy documents (where data.items is undefined) to prevent resurrection of deleted memos
+        if (!Array.isArray(data.items)) {
+          console.log(`[Sync Reconciliation] Skipping legacy/non-daily memo document ${doc.id}`);
+          continue;
+        }
+
+        const remoteItems = data.items;
 
         // 1. Fetch existing local memos for this date
         const localMemos = await DiaryDB.getMemosForDate(dateStr, uid);
