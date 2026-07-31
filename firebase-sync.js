@@ -441,7 +441,11 @@
             const items = (data && Array.isArray(data.items)) ? data.items : [];
             await DiaryDB.deleteMemosForDate(todayDate, partnerId);
             if (items.length > 0) {
-              await DiaryDB.saveMemos(items, partnerId);
+              const normalizedItems = items.map(item => ({
+                ...item,
+                date: todayDate
+              }));
+              await DiaryDB.saveMemos(normalizedItems, partnerId);
             }
             console.log(`[Partner Memos Today] Realtime update for date ${todayDate}: ${items.length} items synced`);
           } else {
