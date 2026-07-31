@@ -557,9 +557,13 @@ class DiaryDB {
     // 2. 清除 IndexedDB
     try {
       const db = await this.open();
-      const transaction = db.transaction(['diaries', 'memos'], 'readwrite');
+      const storesToClear = ['diaries'];
+      if (db.objectStoreNames.contains('memos_v2')) storesToClear.push('memos_v2');
+      else if (db.objectStoreNames.contains('memos')) storesToClear.push('memos');
+
+      const transaction = db.transaction(storesToClear, 'readwrite');
       const diaryStore = transaction.objectStore('diaries');
-      const memoStore = transaction.objectStore('memos');
+      const memoStore = storesToClear.includes('memos_v2') ? transaction.objectStore('memos_v2') : (storesToClear.includes('memos') ? transaction.objectStore('memos') : null);
       
       // 清除日記 Store
       await new Promise((resolve, reject) => {
@@ -583,23 +587,25 @@ class DiaryDB {
       });
 
       // 清除隨筆 Store
-      await new Promise((resolve, reject) => {
-        const request = memoStore.openCursor();
-        request.onsuccess = (e) => {
-          const cursor = e.target.result;
-          if (cursor) {
-            const memo = cursor.value;
-            const memoUser = memo.userId || 'user_a';
-            if (memoUser === userId) {
-              memoStore.delete(cursor.primaryKey);
+      if (memoStore) {
+        await new Promise((resolve, reject) => {
+          const request = memoStore.openCursor();
+          request.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              const memo = cursor.value;
+              const memoUser = memo ? (memo.userId || 'user_a') : '';
+              if (memoUser === userId) {
+                memoStore.delete(cursor.primaryKey);
+              }
+              cursor.continue();
+            } else {
+              resolve();
             }
-            cursor.continue();
-          } else {
-            resolve();
-          }
-        };
-        request.onerror = () => reject(request.error);
-      });
+          };
+          request.onerror = () => reject(request.error);
+        });
+      }
     } catch (dbErr) {
       console.warn('IndexedDB clear userData fallback to LocalStorage/memory:', dbErr);
     }
@@ -621,8 +627,9 @@ class DiaryDB {
     if (!userId) throw new Error("[DiaryDB] userId is required for getAllMemos");
     try {
       const db = await this.open();
-      const transaction = db.transaction('memos', 'readonly');
-      const store = transaction.objectStore('memos');
+      const storeName = db.objectStoreNames.contains('memos_v2') ? 'memos_v2' : 'memos';
+      const transaction = db.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
       
       return await new Promise((resolve, reject) => {
         const memos = [];
@@ -631,7 +638,7 @@ class DiaryDB {
           const cursor = e.target.result;
           if (cursor) {
             const memo = cursor.value;
-            if (memo.userId === userId) {
+            if (memo && memo.userId === userId) {
               memos.push(memo);
             }
             cursor.continue();
