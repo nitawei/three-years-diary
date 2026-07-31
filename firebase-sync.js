@@ -726,6 +726,58 @@
     }
   };
 
+  // Ensure owner's local today's Diary and Memos are flushed and verified in Cloud Firestore BEFORE creating PIN
+  async function ensurePreInviteCloudSync(uid) {
+    if (!uid || !window.db) return;
+    console.log("[PARTNER INVITE] Pre-invite cloud sync START for uid:", uid);
+
+    // 1. Process any pending queue items first
+    if (window.SyncManager && window.SyncManager.processQueue) {
+      await window.SyncManager.processQueue();
+    }
+
+    // 2. Ensure today's local diary is uploaded to Cloud Firestore
+    const todayDiary = await DiaryDB.getDiary(TODAY_DATE_STR, uid);
+    if (todayDiary && todayDiary.content && todayDiary.content.trim()) {
+      console.log("[PARTNER INVITE] Syncing today's local Diary to Cloud Firestore...");
+      await window.db.collection('users').doc(uid).collection('diaries').doc(TODAY_DATE_STR).set({
+        date: TODAY_DATE_STR,
+        content: todayDiary.content,
+        mood: todayDiary.mood || 'none',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      console.log("[PARTNER INVITE] Diary sync COMPLETE");
+    }
+
+    // 3. Ensure today's local memos are uploaded to Cloud Firestore
+    const todayMemos = await DiaryDB.getMemosForDate(TODAY_DATE_STR, uid);
+    const memoItems = todayMemos.map(m => ({
+      id: m.id,
+      date: TODAY_DATE_STR,
+      time: m.time || '00:00',
+      content: m.content || '',
+      images: m.images || []
+    }));
+    console.log(`[PARTNER INVITE] Syncing today's local Memos (${memoItems.length} items) to Cloud Firestore...`);
+    await window.db.collection('users').doc(uid).collection('memos').doc(TODAY_DATE_STR).set({
+      date: TODAY_DATE_STR,
+      items: memoItems,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    console.log("[PARTNER INVITE] Memo sync COMPLETE");
+
+    // 4. Verify today's Cloud Firestore documents exist / are queryable
+    const diaryDoc = await window.db.collection('users').doc(uid).collection('diaries').doc(TODAY_DATE_STR).get();
+    const memoDoc = await window.db.collection('users').doc(uid).collection('memos').doc(TODAY_DATE_STR).get();
+    console.log("[PARTNER INVITE] Firestore verification COMPLETE", {
+      diaryExists: diaryDoc.exists,
+      memoExists: memoDoc.exists
+    });
+
+    console.log("[PARTNER INVITE] Pre-invite cloud sync SUCCESS");
+    return true;
+  }
+
   // Override PartnerService Invite Flow and Linkage Logic
   const FirebasePartnerService = {
     getPartnerId(userId) {
@@ -791,6 +843,15 @@
         throw new Error('Must be logged in with Google/Firebase Auth.');
       }
 
+      // CRITICAL PRE-INVITE SYNC: Flush and verify owner's today's Diary & Memo to Cloud Firestore BEFORE creating PIN
+      try {
+        await ensurePreInviteCloudSync(realAuthUid);
+      } catch (syncErr) {
+        console.error('[PARTNER INVITE] Pre-invite cloud sync FAILED:', syncErr);
+        alert('產生邀請碼失敗：無法將今日資料同步至雲端，請檢查網路連線後重試。');
+        throw syncErr;
+      }
+
       // Ensure owner's publicProfile/info exists before generating invite code
       try {
         const pubRef = window.db.collection('users').doc(realAuthUid).collection('publicProfile').doc('info');
@@ -841,7 +902,7 @@
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           expiresAt: firebase.firestore.Timestamp.fromDate(expires)
         });
-        console.log(`[PARTNER DEBUG] generateInviteCode Success for PIN: ${pin} (ownerUid: ${realAuthUid})`);
+        console.log(`[PARTNER INVITE] PIN READY: ${pin} (ownerUid: ${realAuthUid})`);
         return pin;
       } catch (err) {
         console.error(`[PARTNER DEBUG] generateInviteCode Error:
