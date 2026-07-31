@@ -546,26 +546,41 @@ async function getPartnerName() {
 }
 
 function updatePartnerDisplayNamesInUI(rawPartnerName) {
+  const partnerId = window.PartnerService ? window.PartnerService.getPartnerId(State.currentUser) : null;
+  const isPaired = !!partnerId;
   const name = (rawPartnerName && typeof rawPartnerName === 'string' && rawPartnerName.trim()) ? rawPartnerName.trim() : '筆友';
-
-  const partnerDiarySub = document.querySelector('#partner-page .header-subtitle');
-  if (partnerDiarySub) {
-    partnerDiarySub.textContent = `${name} 寫下今日日記(唯讀)`;
-  }
 
   const partnerHeaderTitle = document.querySelector('#partner-page .section-title');
   if (partnerHeaderTitle) {
-    partnerHeaderTitle.textContent = `${name} 的這一天`;
+    partnerHeaderTitle.textContent = isPaired ? `${name} 的這一天` : '交換日記';
   }
 
-  const partnerMemoTitle = document.querySelector('#partner-page .memo-section-title');
+  const partnerDiarySub = document.getElementById('partner-paired-meta');
+  if (partnerDiarySub) {
+    const currentText = partnerDiarySub.textContent || '';
+    if (currentText.includes('已寫下今日日記')) {
+      partnerDiarySub.textContent = `${name}已寫下今日日記 (唯讀)`;
+    } else {
+      partnerDiarySub.textContent = `${name}今天尚未寫下日記字句。`;
+    }
+  }
+
+  const partnerMemoTitle = document.querySelector('#partner-paired-memos-container .section-divider-title') || document.querySelector('#partner-page .section-divider-title');
   if (partnerMemoTitle) {
-    partnerMemoTitle.textContent = `${name} 的隨筆`;
+    partnerMemoTitle.textContent = isPaired ? `${name}的隨筆` : '筆友的隨筆';
   }
 
   const drawerTitle = document.getElementById('memo-drawer-title');
   if (drawerTitle && !drawerTitle.classList.contains('hidden')) {
-    drawerTitle.textContent = `${name} 的隨筆`;
+    drawerTitle.textContent = isPaired ? `${name}的隨筆` : '筆友的隨筆';
+  }
+
+  const modalPartnerCard = document.getElementById('modal-partner-notebook-card');
+  if (modalPartnerCard) {
+    const cardTitle = modalPartnerCard.querySelector('.section-title');
+    if (cardTitle) {
+      cardTitle.textContent = isPaired ? `${name}的日記` : '交換日記';
+    }
   }
 }
 window.updatePartnerDisplayNamesInUI = updatePartnerDisplayNamesInUI;
@@ -892,7 +907,7 @@ async function loadTodayData() {
     
     if (partnerStatusTag && panelUnlinked && panelInviteGen && panelInviteInput && panelPaired) {
       if (!partnerId) {
-        // 未聯結狀態
+        // 未聯結 / 已解除配對狀態
         partnerStatusTag.textContent = '尚未聯結';
         partnerStatusTag.style.backgroundColor = 'var(--color-primary-light)';
         partnerStatusTag.style.color = 'var(--color-text-sub)';
@@ -904,6 +919,23 @@ async function loadTodayData() {
         
         const partnerMemosContainer = document.getElementById('partner-paired-memos-container');
         if (partnerMemosContainer) partnerMemosContainer.style.display = 'none';
+
+        // 清除與重置 Partner 頁面的 UI Title
+        const partnerHeaderTitle = document.querySelector('#partner-page .section-title');
+        if (partnerHeaderTitle) partnerHeaderTitle.textContent = '交換日記';
+
+        const partnerMeta = document.getElementById('partner-paired-meta');
+        if (partnerMeta) partnerMeta.textContent = '筆友今天尚未寫下日記字句。';
+
+        const partnerMemoTitle = document.querySelector('#partner-paired-memos-container .section-divider-title');
+        if (partnerMemoTitle) partnerMemoTitle.textContent = '筆友的隨筆';
+
+        const modalPartnerCard = document.getElementById('modal-partner-notebook-card');
+        if (modalPartnerCard) {
+          const cardTitle = modalPartnerCard.querySelector('.section-title');
+          if (cardTitle) cardTitle.textContent = '交換日記';
+          modalPartnerCard.classList.add('hidden');
+        }
       } else {
         // 已聯結狀態
         partnerStatusTag.textContent = '已聯結';
@@ -919,6 +951,9 @@ async function loadTodayData() {
         const partnerDiary = await DiaryDB.getDiary(State.activeDate, partnerId);
         const partnerMeta = document.getElementById('partner-paired-meta');
         const partnerName = await window.getPartnerName();
+
+        // 呼叫 UI 同步方法更新所有位置
+        updatePartnerDisplayNamesInUI(partnerName);
         
         if (partnerMeta) {
           if (partnerDiary && partnerDiary.content && partnerDiary.content.trim()) {

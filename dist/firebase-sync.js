@@ -682,12 +682,6 @@
           const pubDoc = await window.db.collection('users').doc(inviteOwnerUid).collection('publicProfile').doc('info').get();
           if (pubDoc.exists && pubDoc.data().displayName && pubDoc.data().displayName.trim()) {
             inviterName = pubDoc.data().displayName.trim();
-          } else {
-            // Fallback for local/mock users
-            const userDoc = await window.db.collection('users').doc(inviteOwnerUid).get();
-            if (userDoc.exists && userDoc.data().displayName && userDoc.data().displayName.trim()) {
-              inviterName = userDoc.data().displayName.trim();
-            }
           }
         } catch (err) {
           console.warn('[PARTNER PREVIEW] Could not fetch publicProfile for owner:', inviteOwnerUid, err);
@@ -711,6 +705,22 @@
       if (!realAuthUid) {
         console.error('[PARTNER AUTH ERROR] No active Firebase Auth session found for generateInviteCode!');
         throw new Error('Must be logged in with Google/Firebase Auth.');
+      }
+
+      // Ensure owner's publicProfile/info exists before generating invite code
+      try {
+        const pubRef = window.db.collection('users').doc(realAuthUid).collection('publicProfile').doc('info');
+        const pubDoc = await pubRef.get();
+        if (!pubDoc.exists) {
+          const userDoc = await window.db.collection('users').doc(realAuthUid).get();
+          const ownerName = (userDoc.exists && userDoc.data().displayName) ? userDoc.data().displayName.trim() : (authUser ? (authUser.displayName || (authUser.email ? authUser.email.split('@')[0] : '筆友')) : '筆友');
+          await pubRef.set({
+            displayName: ownerName,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        }
+      } catch (err) {
+        console.warn('[INVITE CREATE] Ensure publicProfile notice:', err);
       }
 
       const pin = String(Math.floor(100000 + Math.random() * 900000));
