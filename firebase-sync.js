@@ -1512,16 +1512,5 @@
     });
   }
 
-  // Export helper globally if needed
-  window.getPartnerName = async function() {
-    if (!currentPartnerId) return '筆友';
-    try {
-      const doc = await window.db.collection('users').doc(currentPartnerId).get();
-      if (doc.exists) {
-        return doc.data().displayName || '筆友';
-      }
-    } catch (_) {}
-    return '筆友';
-  };
-
+  // Helper cleanup completed
 })();
