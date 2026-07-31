@@ -4276,4 +4276,5 @@ window.openEditDiaryDrawer = openEditDiaryDrawer;
 window.SyncManager = SyncManager;
 window.renderWeeklyReview = renderWeeklyReview;
 window.getPartnerName = getPartnerName;
+window.loadTodayData = loadTodayData;
 window.isDateEditable = isDateInCurrentWeek;
