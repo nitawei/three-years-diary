@@ -46,7 +46,8 @@
       setSessionCompat(user.uid, user.email, 'google');
       
       // Update State variables
-      State.currentUser = user.uid;
+      if (window.State) window.State.currentUser = user.uid;
+      else if (typeof State !== 'undefined') State.currentUser = user.uid;
       
       // Check if user has profile in Firestore
       try {
@@ -123,7 +124,8 @@
       console.log("[Firebase Auth] User logged out.");
       clearSessionCompat();
       stopAllListeners();
-      State.currentUser = 'guest'; // GUEST = 'guest'
+      if (window.State) window.State.currentUser = 'guest'; // GUEST = 'guest'
+      else if (typeof State !== 'undefined') State.currentUser = 'guest';
       
       // Redirect to login if on protected pages
       if (window.location.hash !== '#login' && window.location.hash !== '#splash') {

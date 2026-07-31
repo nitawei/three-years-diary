@@ -2201,6 +2201,7 @@ async function handleMemoSubmit() {
   if (!content && State.uploadedImages.length === 0) {
     alert('請填寫隨筆內容或上傳至少一張圖片。');
     return;
+  }
   if (!State.currentUser) {
     console.warn("[Auth Race Protection] Blocked memo write because State.currentUser is null");
     alert("請先完成登入後再進行隨筆操作。");
