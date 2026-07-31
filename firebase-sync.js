@@ -326,6 +326,8 @@
   let currentPairId = null;
   let currentSharingStartDate = null;
   let activeListenersPartnerId = null;
+  let partnerDiariesState = 'IDLE';
+  let partnerMemosState = 'IDLE';
 
   // Real-time Partner Info & Single Source of Truth Listener
   function startPartnerInfoListener(uid) {
@@ -354,16 +356,24 @@
             links[partnerId] = uid;
             localStorage.setItem('partner_links', JSON.stringify(links));
 
-            // CRITICAL: Only launch child data listeners once partnership is Server-Confirmed
-            if (isServerConfirmed && activeListenersPartnerId !== partnerId) {
-              console.log("[Partnership Listener] Server-confirmed active partnership connected with partner:", partnerId, "pairId:", pairId);
-              activeListenersPartnerId = partnerId;
+            // CRITICAL: Ensure child data listeners are ACTIVE once partnership is Server-Confirmed
+            if (isServerConfirmed) {
+              const needsDiariesRecreate = !partnerDiariesUnsubscribe || partnerDiariesState === 'TERMINATED' || activeListenersPartnerId !== partnerId;
+              const needsMemosRecreate = !partnerMemosUnsubscribe || partnerMemosState === 'TERMINATED' || activeListenersPartnerId !== partnerId;
 
-              startPartnerDiariesListener(partnerId, sharingStartDate);
-              startPartnerMemosListener(partnerId, sharingStartDate);
-              startPartnerPublicProfileListener(partnerId);
+              if (needsDiariesRecreate || needsMemosRecreate) {
+                console.log("[Partnership Listener] Server-confirmed active partnership connected/recovering child listeners for partner:", partnerId, "pairId:", pairId, {
+                  needsDiariesRecreate,
+                  needsMemosRecreate
+                });
+                activeListenersPartnerId = partnerId;
 
-              if (window.loadTodayData) await window.loadTodayData();
+                if (needsDiariesRecreate) startPartnerDiariesListener(partnerId, sharingStartDate);
+                if (needsMemosRecreate) startPartnerMemosListener(partnerId, sharingStartDate);
+                if (!partnerPublicProfileUnsubscribe) startPartnerPublicProfileListener(partnerId);
+
+                if (window.loadTodayData) await window.loadTodayData();
+              }
             }
           }
         } else {
@@ -393,10 +403,15 @@
 
   // PATH A — Partner Today: Single Document Realtime Listener (users/{partnerId}/diaries/{TODAY_DATE_STR})
   function startPartnerDiariesListener(partnerId, sharingStartDate) {
-    if (partnerDiariesUnsubscribe) partnerDiariesUnsubscribe();
+    if (partnerDiariesUnsubscribe) {
+      partnerDiariesUnsubscribe();
+      partnerDiariesUnsubscribe = null;
+    }
+    partnerDiariesState = 'ACTIVE';
 
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries').doc(TODAY_DATE_STR)
       .onSnapshot(async (docSnap) => {
+        partnerDiariesState = 'ACTIVE';
         try {
           if (docSnap.exists) {
             const data = docSnap.data();
@@ -425,16 +440,23 @@
           console.error('[Partner Today Sync] Error updating local cache:', err);
         }
       }, (err) => {
-        console.warn("[Partner Today Sync] Subscription notice:", err);
+        console.warn("[Partner Today Sync] Subscription notice (listener terminated):", err);
+        partnerDiariesUnsubscribe = null;
+        partnerDiariesState = 'TERMINATED';
       });
   }
 
   function startPartnerMemosListener(partnerId, sharingStartDate) {
-    if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
+    if (partnerMemosUnsubscribe) {
+      partnerMemosUnsubscribe();
+      partnerMemosUnsubscribe = null;
+    }
+    partnerMemosState = 'ACTIVE';
 
     const todayDate = TODAY_DATE_STR;
     partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos').doc(todayDate)
       .onSnapshot(async (docSnap) => {
+        partnerMemosState = 'ACTIVE';
         try {
           if (docSnap.exists) {
             const data = docSnap.data();
@@ -456,7 +478,9 @@
           console.error('[Partner Memos Today] Error saving partner memos to local DB:', err);
         }
       }, (err) => {
-        console.warn("[Partner Memos Today] Subscription notice:", err);
+        console.warn("[Partner Memos Today] Subscription notice (listener terminated):", err);
+        partnerMemosUnsubscribe = null;
+        partnerMemosState = 'TERMINATED';
       });
   }
 
@@ -494,6 +518,8 @@
 
   function stopPartnerDataListeners() {
     activeListenersPartnerId = null;
+    partnerDiariesState = 'STOPPED';
+    partnerMemosState = 'STOPPED';
     if (partnerDiariesUnsubscribe) { partnerDiariesUnsubscribe(); partnerDiariesUnsubscribe = null; }
     if (partnerMemosUnsubscribe) { partnerMemosUnsubscribe(); partnerMemosUnsubscribe = null; }
     if (partnerPublicProfileUnsubscribe) { partnerPublicProfileUnsubscribe(); partnerPublicProfileUnsubscribe = null; }
