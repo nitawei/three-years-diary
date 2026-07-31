@@ -524,17 +524,17 @@ function updateSettingsProfileUI(user) {
 }
 
 async function getPartnerName() {
-  const partnerId = window.PartnerService.getPartnerId(State.currentUser);
+  const partnerId = window.PartnerService ? window.PartnerService.getPartnerId(State.currentUser) : null;
   if (partnerId) {
     const partnerUser = await DiaryDB.getUser(partnerId);
-    if (partnerUser && partnerUser.displayName) {
-      return partnerUser.displayName;
+    if (partnerUser && partnerUser.displayName && typeof partnerUser.displayName === 'string' && partnerUser.displayName.trim()) {
+      return partnerUser.displayName.trim();
     }
     if (window.db && partnerId !== 'user_a' && partnerId !== 'user_b') {
       try {
         const pubDoc = await window.db.collection('users').doc(partnerId).collection('publicProfile').doc('info').get();
-        if (pubDoc.exists && pubDoc.data().displayName) {
-          const name = pubDoc.data().displayName;
+        if (pubDoc.exists && pubDoc.data().displayName && typeof pubDoc.data().displayName === 'string' && pubDoc.data().displayName.trim()) {
+          const name = pubDoc.data().displayName.trim();
           await DiaryDB.saveUser({ id: partnerId, displayName: name, updatedAt: new Date().toISOString() });
           return name;
         }
@@ -545,21 +545,27 @@ async function getPartnerName() {
   return '筆友';
 }
 
-function updatePartnerDisplayNamesInUI(partnerName) {
-  if (!partnerName) return;
+function updatePartnerDisplayNamesInUI(rawPartnerName) {
+  const name = (rawPartnerName && typeof rawPartnerName === 'string' && rawPartnerName.trim()) ? rawPartnerName.trim() : '筆友';
+
+  const partnerDiarySub = document.querySelector('#partner-page .header-subtitle');
+  if (partnerDiarySub) {
+    partnerDiarySub.textContent = `${name} 寫下今日日記(唯讀)`;
+  }
 
   const partnerHeaderTitle = document.querySelector('#partner-page .section-title');
   if (partnerHeaderTitle) {
-    partnerHeaderTitle.textContent = `${partnerName} 的這一天`;
+    partnerHeaderTitle.textContent = `${name} 的這一天`;
   }
+
   const partnerMemoTitle = document.querySelector('#partner-page .memo-section-title');
   if (partnerMemoTitle) {
-    partnerMemoTitle.textContent = `${partnerName} 的今日隨筆`;
+    partnerMemoTitle.textContent = `${name} 的隨筆`;
   }
 
   const drawerTitle = document.getElementById('memo-drawer-title');
   if (drawerTitle && !drawerTitle.classList.contains('hidden')) {
-    drawerTitle.textContent = `${partnerName} 的隨筆`;
+    drawerTitle.textContent = `${name} 的隨筆`;
   }
 }
 window.updatePartnerDisplayNamesInUI = updatePartnerDisplayNamesInUI;
@@ -2931,8 +2937,13 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
           const partnerText = document.getElementById('modal-partner-notebook-text');
           const partnerMeta = document.getElementById('modal-partner-notebook-meta');
           const partnerMemoBtn = document.getElementById('btn-partner-modal-memo');
+          const partnerCardHeaderTitle = modalPartnerCard.querySelector('.section-title');
           
           if (partnerText && partnerMeta && partnerMemoBtn) {
+            const partnerName = await window.getPartnerName();
+            if (partnerCardHeaderTitle) {
+              partnerCardHeaderTitle.textContent = `${partnerName} 的日記`;
+            }
             partnerText.textContent = partnerDiary.content;
             partnerMeta.textContent = formattedDate;
             
@@ -2940,8 +2951,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
               const reviewMemoDrawer = document.getElementById('review-memo-drawer');
               const reviewMemoTitle = document.getElementById('review-memo-title');
               if (reviewMemoDrawer && reviewMemoTitle) {
-                const partnerName = await window.getPartnerName();
-                reviewMemoTitle.textContent = `${partnerName}的隨筆`;
+                reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
                 const sharingStartDate = window.PartnerService ? window.PartnerService.getSharingStartDate(State.currentUser) : null;
                 const partnerMemos = await window.getPartnerMemosByDate(partnerId, dateStr, sharingStartDate);
                 renderReviewMemoTimeline(partnerMemos);
