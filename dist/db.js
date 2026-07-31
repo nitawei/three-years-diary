@@ -361,12 +361,15 @@ class DiaryDB {
   }
 
   static async deleteMemo(id) {
+    if (id === undefined || id === null) return true;
+    const numId = Number(id);
+    const validKey = (!isNaN(numId) && String(numId) === String(id)) ? numId : id;
     try {
       const db = await this.open();
       return await new Promise((resolve, reject) => {
         const transaction = db.transaction('memos', 'readwrite');
         const store = transaction.objectStore('memos');
-        const request = store.delete(Number(id));
+        const request = store.delete(validKey);
 
         request.onsuccess = () => resolve(true);
         request.onerror = () => reject(request.error);
@@ -376,12 +379,12 @@ class DiaryDB {
       this.useLocalStorage = true;
       try {
         let memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
-        memos = memos.filter(m => m.id !== Number(id));
+        memos = memos.filter(m => String(m.id) !== String(id));
         localStorage.setItem('diary_memos', JSON.stringify(memos));
         return true;
       } catch (lsErr) {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
-        this.memoryMemos = this.memoryMemos.filter(m => m.id !== Number(id));
+        this.memoryMemos = this.memoryMemos.filter(m => String(m.id) !== String(id));
         return true;
       }
     }
