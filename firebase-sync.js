@@ -319,6 +319,16 @@
           if (window.loadTodayData) await window.loadTodayData();
         }
       }, (err) => {
+        console.error("[FIRESTORE LISTENER ERROR ORIGIN]", {
+          timestamp: new Date().toISOString(),
+          listenerName: "startPartnershipListener",
+          path: `partnerships/${pairId}`,
+          operation: "onSnapshot",
+          uid: (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : null,
+          errorCode: err ? err.code : 'UNKNOWN',
+          errorMessage: err ? err.message : 'UNKNOWN',
+          stack: new Error().stack
+        });
         console.error("[Partnership Sync] Subscription error:", err);
       });
   }
@@ -326,8 +336,58 @@
   let currentPairId = null;
   let currentSharingStartDate = null;
   let activeListenersPartnerId = null;
-  let partnerDiariesState = 'IDLE';
-  let partnerMemosState = 'IDLE';
+  let partnerDiariesState = 'IDLE'; // IDLE, VERIFYING, CONNECTING, ACTIVE, TERMINATED
+  let partnerMemosState = 'IDLE';   // IDLE, VERIFYING, CONNECTING, ACTIVE, TERMINATED
+
+  // Helper Function: Server-Verified Partnership Activation Gate
+  async function verifyServerPartnershipActive(pairId, currentUid, partnerId) {
+    console.log('[PARTNER VERIFY START]', {
+      timestamp: new Date().toISOString(),
+      pairId,
+      currentUid,
+      partnerId
+    });
+    try {
+      let docSnap = null;
+      try {
+        docSnap = await window.db.collection('partnerships').doc(pairId).get({ source: 'server' });
+      } catch (serverErr) {
+        console.warn("[PARTNER VERIFY] Server source read fallback to default get:", serverErr);
+        docSnap = await window.db.collection('partnerships').doc(pairId).get();
+      }
+
+      if (docSnap && docSnap.exists) {
+        const data = docSnap.data();
+        const isStatusActive = data && data.status === 'active';
+        const hasMember = data && Array.isArray(data.memberUids) && data.memberUids.includes(currentUid);
+        const hasSharingStartDate = data && !!data.sharingStartDate;
+
+        if (isStatusActive && hasMember && hasSharingStartDate) {
+          console.log('[PARTNER VERIFY SUCCESS]', {
+            timestamp: new Date().toISOString(),
+            pairId,
+            status: data.status,
+            sharingStartDate: data.sharingStartDate,
+            fromCache: docSnap.metadata ? docSnap.metadata.fromCache : false
+          });
+          return { success: true, data };
+        }
+      }
+      console.warn('[PARTNER VERIFY FAILED]', {
+        timestamp: new Date().toISOString(),
+        pairId,
+        exists: docSnap ? docSnap.exists : false
+      });
+      return { success: false };
+    } catch (err) {
+      console.error('[PARTNER VERIFY FAILED]', {
+        timestamp: new Date().toISOString(),
+        pairId,
+        error: err ? err.message : 'UNKNOWN'
+      });
+      return { success: false };
+    }
+  }
 
   // Real-time Partner Info & Single Source of Truth Listener
   function startPartnerInfoListener(uid) {
@@ -337,11 +397,20 @@
       .where('memberUids', 'array-contains', uid)
       .onSnapshot({ includeMetadataChanges: true }, async (querySnap) => {
         const isServerConfirmed = !querySnap.metadata.hasPendingWrites;
-        console.log("[Partnership Listener] Snapshot received:", {
-          hasPendingWrites: querySnap.metadata.hasPendingWrites,
-          isServerConfirmed: isServerConfirmed,
-          fromCache: querySnap.metadata.fromCache,
-          docsCount: querySnap.docs.length
+        console.log("[PARTNER SNAPSHOT GATE]", {
+          timestamp: new Date().toISOString(),
+          docsCount: querySnap.docs.length,
+          metadata: {
+            fromCache: querySnap.metadata.fromCache,
+            hasPendingWrites: querySnap.metadata.hasPendingWrites
+          },
+          isServerConfirmed: !querySnap.metadata.hasPendingWrites,
+          currentUid: (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : null,
+          listenerStateBeforeCreate: {
+            partnerDiariesState,
+            hasDiaryUnsubscribe: !!partnerDiariesUnsubscribe,
+            activeListenersPartnerId
+          }
         });
         const activeDoc = querySnap.docs.find(doc => doc.data().status === 'active');
         if (activeDoc) {
@@ -356,29 +425,66 @@
             currentConnectedAt = data.createdAt;
             currentSharingStartDate = sharingStartDate;
 
+            console.log('[T2: PARTNER STATE INITIALIZED]', {
+              timestamp: new Date().toISOString(),
+              currentPartnerId: partnerId,
+              currentPairId: pairId,
+              sharingStartDate: sharingStartDate
+            });
+
             // Sync partner links in localStorage
             const links = JSON.parse(localStorage.getItem('partner_links') || '{}');
             links[uid] = partnerId;
             links[partnerId] = uid;
             localStorage.setItem('partner_links', JSON.stringify(links));
 
-            // CRITICAL: Ensure child data listeners are ACTIVE once partnership is Server-Confirmed
+            // CRITICAL: Ensure child data listeners are ACTIVE once partnership is Server-Confirmed & Server-Verified
             if (isServerConfirmed) {
-              const needsDiariesRecreate = !partnerDiariesUnsubscribe || partnerDiariesState === 'TERMINATED' || activeListenersPartnerId !== partnerId;
-              const needsMemosRecreate = !partnerMemosUnsubscribe || partnerMemosState === 'TERMINATED' || activeListenersPartnerId !== partnerId;
+              const needsDiariesRecreate = !partnerDiariesUnsubscribe || partnerDiariesState === 'TERMINATED' || partnerDiariesState === 'IDLE' || activeListenersPartnerId !== partnerId;
+              const needsMemosRecreate = !partnerMemosUnsubscribe || partnerMemosState === 'TERMINATED' || partnerMemosState === 'IDLE' || activeListenersPartnerId !== partnerId;
 
-              if (needsDiariesRecreate || needsMemosRecreate) {
-                console.log("[Partnership Listener] Server-confirmed active partnership connected/recovering child listeners for partner:", partnerId, "pairId:", pairId, {
-                  needsDiariesRecreate,
-                  needsMemosRecreate
+              const isDiariesLocked = partnerDiariesState === 'VERIFYING' || partnerDiariesState === 'CONNECTING';
+              const isMemosLocked = partnerMemosState === 'VERIFYING' || partnerMemosState === 'CONNECTING';
+
+              if ((needsDiariesRecreate && !isDiariesLocked) || (needsMemosRecreate && !isMemosLocked)) {
+                if (needsDiariesRecreate && !isDiariesLocked) partnerDiariesState = 'VERIFYING';
+                if (needsMemosRecreate && !isMemosLocked) partnerMemosState = 'VERIFYING';
+
+                console.log("[DIARY LISTENER TRIGGER SOURCE]", {
+                  timestamp: new Date().toISOString(),
+                  reason: { needsDiariesRecreate, needsMemosRecreate, isServerConfirmed },
+                  partnerId,
+                  currentPartnerId,
+                  currentPairId
                 });
-                activeListenersPartnerId = partnerId;
 
-                if (needsDiariesRecreate) startPartnerDiariesListener(partnerId, sharingStartDate);
-                if (needsMemosRecreate) startPartnerMemosListener(partnerId, sharingStartDate);
-                if (!partnerPublicProfileUnsubscribe) startPartnerPublicProfileListener(partnerId);
+                // Server-Verified Activation Flow
+                verifyServerPartnershipActive(pairId, uid, partnerId).then(async (verification) => {
+                  if (verification.success) {
+                    activeListenersPartnerId = partnerId;
 
-                if (window.loadTodayData) await window.loadTodayData();
+                    if (needsDiariesRecreate) {
+                      partnerDiariesState = 'CONNECTING';
+                      console.log('[DIARY LISTENER ACTIVATED]', { timestamp: new Date().toISOString(), partnerId });
+                      startPartnerDiariesListener(partnerId, sharingStartDate);
+                    }
+                    if (needsMemosRecreate) {
+                      partnerMemosState = 'CONNECTING';
+                      startPartnerMemosListener(partnerId, sharingStartDate);
+                    }
+                    if (!partnerPublicProfileUnsubscribe) startPartnerPublicProfileListener(partnerId);
+
+                    if (window.loadTodayData) await window.loadTodayData();
+                  } else {
+                    console.warn('[PARTNER VERIFY FAILED] Child listener activation aborted until next server snapshot.');
+                    if (needsDiariesRecreate) partnerDiariesState = 'TERMINATED';
+                    if (needsMemosRecreate) partnerMemosState = 'TERMINATED';
+                  }
+                }).catch(err => {
+                  console.error('[PARTNER VERIFY ERROR]', err);
+                  if (needsDiariesRecreate) partnerDiariesState = 'TERMINATED';
+                  if (needsMemosRecreate) partnerMemosState = 'TERMINATED';
+                });
               }
             }
           }
@@ -403,12 +509,88 @@
           }
         }
       }, (err) => {
+        console.error("[FIRESTORE LISTENER ERROR ORIGIN]", {
+          timestamp: new Date().toISOString(),
+          listenerName: "startPartnerInfoListener",
+          path: "partnerships",
+          operation: "onSnapshot",
+          uid: (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : null,
+          errorCode: err ? err.code : 'UNKNOWN',
+          errorMessage: err ? err.message : 'UNKNOWN',
+          stack: new Error().stack
+        });
         console.error("[Partnership Sync] Subscription error:", err);
       });
   }
 
   // PATH A — Partner Today: Single Document Realtime Listener (users/{partnerId}/diaries/{TODAY_DATE_STR})
-  function startPartnerDiariesListener(partnerId, sharingStartDate) {
+  async function startPartnerDiariesListener(partnerId, sharingStartDate) {
+    console.log("[DIARY LISTENER CREATE TRACE]", {
+      timestamp: new Date().toISOString(),
+      partnerId,
+      stack: new Error().stack
+    });
+    const listenerId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random());
+    const currentUser = (window.auth && window.auth.currentUser) ? window.auth.currentUser : null;
+    let tokenDetails = null;
+    if (currentUser && typeof currentUser.getIdTokenResult === 'function') {
+      try {
+        const tokenResult = await currentUser.getIdTokenResult();
+        tokenDetails = {
+          tokenUid: currentUser.uid,
+          authTime: tokenResult.authTime,
+          issuedAtTime: tokenResult.issuedAtTime,
+          expirationTime: tokenResult.expirationTime
+        };
+      } catch (e) {
+        tokenDetails = { error: e.message };
+      }
+    }
+
+    console.log('[AUTH TOKEN & LISTENER CREATE]', {
+      listenerId,
+      timestamp: new Date().toISOString(),
+      currentUid: currentUser ? currentUser.uid : null,
+      tokenDetails,
+      currentPartnerId,
+      currentPairId,
+      partnerId
+    });
+
+    // Perform immediate pre-listener single .get() check
+    let preListenerGetResult = null;
+    try {
+      const getSnap = await window.db.collection("users").doc(partnerId).collection("diaries").doc(TODAY_DATE_STR).get();
+      preListenerGetResult = {
+        success: true,
+        exists: getSnap.exists,
+        fromCache: getSnap.metadata.fromCache,
+        errorCode: null
+      };
+    } catch (err) {
+      preListenerGetResult = {
+        success: false,
+        errorCode: err ? err.code : 'unknown'
+      };
+    }
+
+    console.log('[IMMEDIATE PRE-LISTENER GET TEST]', {
+      listenerId,
+      timestamp: new Date().toISOString(),
+      currentUid: currentUser ? currentUser.uid : null,
+      currentPairId,
+      partnerId,
+      preListenerGetResult
+    });
+
+    console.log('[WATCH TARGET CREATE AUDIT]', {
+      listenerId,
+      authUid: currentUser ? currentUser.uid : null,
+      path: `users/${partnerId}/diaries/${TODAY_DATE_STR}`,
+      persistenceEnabled: false,
+      timestamp: new Date().toISOString()
+    });
+
     if (partnerDiariesUnsubscribe) {
       partnerDiariesUnsubscribe();
       partnerDiariesUnsubscribe = null;
@@ -418,6 +600,13 @@
     partnerDiariesUnsubscribe = window.db.collection('users').doc(partnerId).collection('diaries').doc(TODAY_DATE_STR)
       .onSnapshot(async (docSnap) => {
         partnerDiariesState = 'ACTIVE';
+        console.log('[WATCH TARGET SUCCESS AUDIT]', {
+          listenerId,
+          fromCache: docSnap.metadata.fromCache,
+          hasPendingWrites: docSnap.metadata.hasPendingWrites,
+          readTime: new Date().toISOString()
+        });
+        console.log('[DIARY SUCCESS]', { listenerId, timestamp: new Date().toISOString(), unsubscribeCurrentValue: !!partnerDiariesUnsubscribe });
         try {
           if (docSnap.exists) {
             const data = docSnap.data();
@@ -446,7 +635,42 @@
           console.error('[Partner Today Sync] Error updating local cache:', err);
         }
       }, (err) => {
+        const errUser = (window.auth && window.auth.currentUser) ? window.auth.currentUser : null;
+        const calculatedPairId = getPairId(errUser ? errUser.uid : '', partnerId);
+        console.log('[WATCH TARGET ERROR AUDIT]', {
+          listenerId,
+          errorCode: err ? err.code : 'UNKNOWN',
+          timestamp: new Date().toISOString(),
+          activeTargetState: partnerDiariesState,
+          networkState: navigator.onLine ? 'online' : 'offline'
+        });
+        console.log('[PAIR ID RESOLUTION AT ERROR]', {
+          authUid: errUser ? errUser.uid : null,
+          partnerId: partnerId,
+          calculatedPairId: calculatedPairId,
+          clientPairId: currentPairId,
+          timestamp: new Date().toISOString()
+        });
+        console.error("[FIRESTORE LISTENER ERROR ORIGIN]", {
+          timestamp: new Date().toISOString(),
+          listenerName: "startPartnerDiariesListener",
+          path: `users/${partnerId}/diaries/${TODAY_DATE_STR}`,
+          operation: "onSnapshot",
+          uid: errUser ? errUser.uid : null,
+          errorCode: err ? err.code : 'UNKNOWN',
+          errorMessage: err ? err.message : 'UNKNOWN',
+          stack: new Error().stack
+        });
         console.warn("[Partner Today Sync] Subscription notice (listener terminated):", err);
+        console.log('[DIARY ERROR AUTH AUDIT]', {
+          listenerId,
+          timestamp: new Date().toISOString(),
+          currentUid: errUser ? errUser.uid : null,
+          errorCode: err ? err.code : null,
+          pairId: currentPairId,
+          currentPartnerInfo: { partnerId, currentPartnerId, activeListenersPartnerId },
+          unsubscribeCurrentValue: !!partnerDiariesUnsubscribe
+        });
         partnerDiariesUnsubscribe = null;
         partnerDiariesState = 'TERMINATED';
       });
@@ -484,6 +708,16 @@
           console.error('[Partner Memos Today] Error saving partner memos to local DB:', err);
         }
       }, (err) => {
+        console.error("[FIRESTORE LISTENER ERROR ORIGIN]", {
+          timestamp: new Date().toISOString(),
+          listenerName: "startPartnerMemosListener",
+          path: `users/${partnerId}/memos/${todayDate}`,
+          operation: "onSnapshot",
+          uid: (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : null,
+          errorCode: err ? err.code : 'UNKNOWN',
+          errorMessage: err ? err.message : 'UNKNOWN',
+          stack: new Error().stack
+        });
         console.warn("[Partner Memos Today] Subscription notice (listener terminated):", err);
         partnerMemosUnsubscribe = null;
         partnerMemosState = 'TERMINATED';
@@ -518,11 +752,22 @@
         }
         if (window.loadTodayData) await window.loadTodayData();
       }, (err) => {
+        console.error("[FIRESTORE LISTENER ERROR ORIGIN]", {
+          timestamp: new Date().toISOString(),
+          listenerName: "startPartnerPublicProfileListener",
+          path: `users/${partnerId}/publicProfile/info`,
+          operation: "onSnapshot",
+          uid: (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : null,
+          errorCode: err ? err.code : 'UNKNOWN',
+          errorMessage: err ? err.message : 'UNKNOWN',
+          stack: new Error().stack
+        });
         console.warn("[Partner Profile Sync] Public profile listener notice:", err);
       });
   }
 
   function stopPartnerDataListeners() {
+    console.log('[STOP LISTENER]', { timestamp: new Date().toISOString() });
     activeListenersPartnerId = null;
     partnerDiariesState = 'STOPPED';
     partnerMemosState = 'STOPPED';
@@ -1057,10 +1302,23 @@
           sharingStartDate: sharingStartDate
         });
 
+        console.log('[BATCH WRITE OPERATION AUDIT]', {
+          timestamp: new Date().toISOString(),
+          partnershipExists: partnershipDoc.exists,
+          partnershipStatus: partnershipDoc.exists ? (partnershipDoc.data() ? partnershipDoc.data().status : null) : null,
+          partnershipOperation: partnershipDoc.exists ? 'update' : 'create',
+          invitationOperation: 'update',
+          pin: pin,
+          pairId: pairId,
+          invitationPath: `invitations/${pin}`,
+          partnershipPath: `partnerships/${pairId}`
+        });
+
         console.log('[REAL ACCEPT BATCH] COMMIT START');
 
         await batch.commit();
 
+        console.log('[T0: BATCH COMMIT SUCCESS]', { timestamp: new Date().toISOString() });
         console.log('[REAL ACCEPT BATCH] COMMIT SUCCESS');
         console.log(`[PARTNER DEBUG] Batch committed successfully!`);
         return true;
