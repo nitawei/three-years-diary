@@ -1249,39 +1249,19 @@
         const pairId = getPairId(inviteOwnerUid, realAuthUid);
 
         const partnershipRef = window.db.collection('partnerships').doc(pairId);
-        const partnershipDoc = await partnershipRef.get();
 
-        if (partnershipDoc.exists) {
-          const pData = partnershipDoc.data();
-          if (pData && pData.status === 'active') {
-            console.warn(`[PARTNER DEBUG] Users ${inviteOwnerUid} and ${realAuthUid} are already active partners.`);
-            alert('你們目前已經是筆友，無需重複配對。');
-            return false;
-          }
-          if (pData && pData.status === 'disconnected') {
-            console.log(`[PARTNER DEBUG] Re-partnering: Updating disconnected partnership ${pairId} to active...`);
-            batch.update(partnershipRef, {
-              status: 'active',
-              sharingStartDate: sharingStartDate,
-              sourceInvitationId: pin,
-              createdAt: connectedAt,
-              disconnectedAt: null
-            });
-          }
-        } else {
-          console.log(`[PARTNER DEBUG] First pairing: Creating new partnership ${pairId}...`);
-          batch.set(partnershipRef, {
-            pairId: pairId,
-            memberUids: [inviteOwnerUid, realAuthUid].sort(),
-            status: 'active',
-            sharingStartDate: sharingStartDate,
-            createdAt: connectedAt,
-            sourceInvitationId: pin,
-            disconnectedAt: null
-          });
-        }
+        // Atomic write: Server evaluates create vs update automatically based on document presence & firestore.rules
+        batch.set(partnershipRef, {
+          pairId: pairId,
+          memberUids: [inviteOwnerUid, realAuthUid].sort(),
+          status: 'active',
+          sharingStartDate: sharingStartDate,
+          createdAt: connectedAt,
+          sourceInvitationId: pin,
+          disconnectedAt: null
+        });
 
-        // 1. Mark invite as accepted atomically with acceptor metadata
+        // Mark invite as accepted atomically with acceptor metadata
         batch.update(inviteRef, {
           status: 'accepted',
           acceptedBy: realAuthUid,
@@ -1304,14 +1284,13 @@
 
         console.log('[BATCH WRITE OPERATION AUDIT]', {
           timestamp: new Date().toISOString(),
-          partnershipExists: partnershipDoc.exists,
-          partnershipStatus: partnershipDoc.exists ? (partnershipDoc.data() ? partnershipDoc.data().status : null) : null,
-          partnershipOperation: partnershipDoc.exists ? 'update' : 'create',
+          partnershipOperation: 'server_decided_create_or_update',
           invitationOperation: 'update',
           pin: pin,
           pairId: pairId,
+          partnershipPath: `partnerships/${pairId}`,
           invitationPath: `invitations/${pin}`,
-          partnershipPath: `partnerships/${pairId}`
+          authUid: realAuthUid
         });
 
         console.log('[REAL ACCEPT BATCH] COMMIT START');
