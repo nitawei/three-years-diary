@@ -1,5 +1,5 @@
 /**
- * update-manager.js - PWA Update Manager (Safe Version)
+ * update-manager.js - PWA Update Manager (Phase 2A Safe Version)
  * Background check for new app version without affecting Firebase, IndexedDB, or Sync.
  */
 (function() {
@@ -7,6 +7,43 @@
 
   const UpdateManager = {
     currentVersion: CURRENT_APP_VERSION,
+    waitingWorker: null,
+
+    initSWListener() {
+      if (!('serviceWorker' in navigator)) return;
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          console.log('[UpdateManager] Service Worker controller changed. Reloading page smoothly...');
+          window.location.reload();
+        }
+      });
+
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (!reg) return;
+
+        if (reg.waiting) {
+          this.waitingWorker = reg.waiting;
+          console.log('[UpdateManager] Found existing waiting Service Worker.');
+          this.checkForUpdate();
+        }
+
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              this.waitingWorker = newWorker;
+              console.log('[UpdateManager] New Service Worker installed and waiting.');
+              this.checkForUpdate();
+            }
+          });
+        });
+      });
+    },
 
     async checkForUpdate() {
       try {
@@ -22,14 +59,24 @@
         if (!response.ok) return;
         const data = await response.json();
         
-        if (data && data.version && data.version !== CURRENT_APP_VERSION) {
-          console.log(`[UpdateManager] New version detected! Current: ${CURRENT_APP_VERSION}, Server: ${data.version}`);
+        if ((data && data.version && data.version !== CURRENT_APP_VERSION) || this.waitingWorker) {
+          console.log(`[UpdateManager] New version detected! Current: ${CURRENT_APP_VERSION}, Server: ${data ? data.version : 'SW waiting'}`);
           this.showUpdateModal();
         } else {
           console.log(`[UpdateManager] App is up to date (${CURRENT_APP_VERSION}).`);
         }
       } catch (err) {
         console.warn('[UpdateManager] Version check failed (silent fallback):', err);
+      }
+    },
+
+    applyUpdate() {
+      if (this.waitingWorker) {
+        console.log('[UpdateManager] Sending SKIP_WAITING to waiting Service Worker...');
+        this.waitingWorker.postMessage({ action: 'SKIP_WAITING' });
+      } else {
+        console.log('[UpdateManager] No waiting worker found, reloading directly...');
+        window.location.reload();
       }
     },
 
@@ -78,7 +125,7 @@
       document.body.appendChild(modalOverlay);
 
       document.getElementById('btn-update-now').addEventListener('click', () => {
-        window.location.reload();
+        this.applyUpdate();
       });
 
       document.getElementById('btn-update-later').addEventListener('click', () => {
@@ -89,12 +136,18 @@
 
   window.UpdateManager = UpdateManager;
 
-  // Background non-blocking version check after window load
+  // Initialize Service Worker lifecycle listener and version check
   if (document.readyState === 'complete') {
-    setTimeout(() => UpdateManager.checkForUpdate(), 2000);
+    setTimeout(() => {
+      UpdateManager.initSWListener();
+      UpdateManager.checkForUpdate();
+    }, 2000);
   } else {
     window.addEventListener('load', () => {
-      setTimeout(() => UpdateManager.checkForUpdate(), 2000);
+      setTimeout(() => {
+        UpdateManager.initSWListener();
+        UpdateManager.checkForUpdate();
+      }, 2000);
     });
   }
 })();
