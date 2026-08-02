@@ -1176,6 +1176,7 @@ async function renderMemoTimeline() {
 function setupEventListeners() {
   const textarea = document.getElementById('diary-textarea');
   const grid = document.getElementById('manuscript-grid');
+  let isComposing = false; // Local closure state for IME safety
 
   // 點擊網格聚焦輸入框
   if (grid && textarea) {
@@ -1186,6 +1187,52 @@ function setupEventListeners() {
 
   // 文字輸入同步與字數統計
   if (textarea) {
+    // IME Composition Event Safety
+    textarea.addEventListener('compositionstart', () => {
+      isComposing = true;
+    });
+
+    textarea.addEventListener('compositionend', () => {
+      isComposing = false;
+      highlightManuscriptCursor();
+    });
+
+    // 稿紙觸控與點擊精確跳格定位 (Mobile Touch & Click Caret Positioning)
+    const handleCaretPositioning = (clientX, clientY) => {
+      if (isComposing || !grid) return;
+
+      // Coordinate calculation MUST use #manuscript-grid.getBoundingClientRect()
+      const rect = grid.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const relX = clientX - rect.left;
+      const relY = clientY - rect.top;
+
+      // Strict Coordinate Clamping (col: 0..9, row: 0..4, targetIdx: 0..49)
+      const col = Math.min(Math.max(Math.floor((relX / rect.width) * 10), 0), 9);
+      const row = Math.min(Math.max(Math.floor((relY / rect.height) * 5), 0), 4);
+      const targetIdx = Math.min(Math.max(row * 10 + col, 0), 49);
+
+      const text = textarea.value || '';
+      const newPos = Math.min(targetIdx, text.length);
+
+      textarea.focus();
+      if (typeof textarea.setSelectionRange === 'function') {
+        textarea.setSelectionRange(newPos, newPos);
+      }
+      highlightManuscriptCursor();
+    };
+
+    // Fast Mobile Touch Reaction (pointerdown)
+    textarea.addEventListener('pointerdown', (e) => {
+      handleCaretPositioning(e.clientX, e.clientY);
+    });
+
+    // Desktop Click Fallback
+    textarea.addEventListener('click', (e) => {
+      handleCaretPositioning(e.clientX, e.clientY);
+    });
+
     textarea.addEventListener('input', (e) => {
       const text = e.target.value;
       State.diaryWordCount = text.length;
