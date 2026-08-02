@@ -1177,6 +1177,7 @@ function setupEventListeners() {
   const textarea = document.getElementById('diary-textarea');
   const grid = document.getElementById('manuscript-grid');
   let isComposing = false; // Local closure state for IME safety
+  let activeFeedbackTimer = null; // Local closure state to prevent timer accumulation
 
   // 點擊網格聚焦輸入框
   if (grid && textarea) {
@@ -1221,6 +1222,22 @@ function setupEventListeners() {
         textarea.setSelectionRange(newPos, newPos);
       }
       highlightManuscriptCursor();
+
+      // Active Cell Micro-Feedback (Pencil Press Touch Feedback with Timer Cleanup)
+      if (activeFeedbackTimer) {
+        clearTimeout(activeFeedbackTimer);
+        activeFeedbackTimer = null;
+      }
+      document.querySelectorAll('#manuscript-grid .manuscript-cell.is-active').forEach(c => c.classList.remove('is-active'));
+
+      const targetCell = document.querySelector(`#manuscript-grid .manuscript-cell[data-index="${targetIdx}"]`);
+      if (targetCell) {
+        targetCell.classList.add('is-active');
+        activeFeedbackTimer = setTimeout(() => {
+          targetCell.classList.remove('is-active');
+          activeFeedbackTimer = null;
+        }, 150);
+      }
     };
 
     // Fast Mobile Touch Reaction (pointerdown)

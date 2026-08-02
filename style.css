@@ -327,7 +327,12 @@ body {
 .manuscript-container.mood-blue .manuscript-cell.has-char { color: var(--color-mood-blue); }
 .manuscript-container.mood-red .manuscript-cell.has-char { color: var(--color-mood-red); }
 
-/* Caret indicator inside cell */
+/* Caret indicator inside cell - Soft paper breathing rhythm */
+.manuscript-cell.is-active {
+  border-color: var(--color-text-main);
+  transition: border-color 0.12s ease-out;
+}
+
 .manuscript-cell.active-cursor {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 1.5px var(--color-primary);
@@ -338,13 +343,15 @@ body {
   position: absolute;
   bottom: 4px;
   width: 40%;
-  height: 2px;
+  height: 1.5px;
   background-color: var(--color-primary);
-  animation: cursor-blink 1s infinite steps(2, start);
+  opacity: 0.85;
+  border-radius: 1px;
+  animation: cursor-breath 1.4s infinite ease-in-out;
 }
-@keyframes cursor-blink {
-  0%, 100% { opacity: 0; }
-  50% { opacity: 1; }
+@keyframes cursor-breath {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.9; }
 }
 
 /* Stretchy hidden input overlay */
