@@ -1850,31 +1850,6 @@
       });
     }
 
-    // 7. Security text typewriter text override
-    const btnSecurityTrigger = document.getElementById('btn-security-trigger');
-    const securityInfo = document.getElementById('login-security-info');
-    const securityText = document.getElementById('login-security-text');
-    let typingTimer = null;
-    if (btnSecurityTrigger && securityInfo && securityText) {
-      btnSecurityTrigger.addEventListener('click', () => {
-        securityInfo.classList.remove('hidden');
-        const fullText = "🛡️ 隱私與安全政策：您的日記資料完全屬於您。寫作內容會以 AES-256 加密存儲於您本地的瀏覽器中；當您登入時，資料會經由安全加密協定，備份至您個人 Google 帳號綁定的私人雲端資料庫。";
-        
-        if (typingTimer) clearInterval(typingTimer);
-        securityText.textContent = "";
-        
-        let index = 0;
-        typingTimer = setInterval(() => {
-          if (index < fullText.length) {
-            securityText.textContent += fullText.charAt(index);
-            index++;
-          } else {
-            clearInterval(typingTimer);
-            typingTimer = null;
-          }
-        }, 30);
-      });
-    }
   }
 
   // Run immediately if document is already loaded, otherwise bind to load event

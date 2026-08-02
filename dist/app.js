@@ -2262,21 +2262,22 @@ function setupEventListeners() {
   if (btnSecurityTrigger && securityInfo && securityText) {
     btnSecurityTrigger.addEventListener('click', () => {
       securityInfo.classList.remove('hidden');
-      const fullText = "🛡️ 隱私與安全政策：您的日記資料完全屬於您。寫作內容會以 AES-256 加密存儲於您本地的瀏覽器中；當您登入時，資料會經由安全加密協定，備份至您個人 Google 帳號綁定的私人雲端資料庫。";
+      const fullText = "🛡️ 隱私與安全說明：您的日記與隨筆資料完全屬於您。資料會在本地瀏覽器安全儲存，並經由 HTTPS 加密傳輸與 Firebase 嚴格權限控管 (Security Rules)，安全備份至您個人 Google 帳號的雲端資料庫。全站無廣告、不追蹤，僅您與您的配對伴侶（若開啟配對）可存取。";
+      const chars = Array.from(fullText);
       
       if (typingTimer) clearInterval(typingTimer);
       securityText.textContent = "";
       
       let index = 0;
       typingTimer = setInterval(() => {
-        if (index < fullText.length) {
-          securityText.textContent += fullText.charAt(index);
+        if (index < chars.length) {
+          securityText.textContent += chars[index];
           index++;
         } else {
           clearInterval(typingTimer);
           typingTimer = null;
         }
-      }, 50);
+      }, 25);
     });
   }
 }
