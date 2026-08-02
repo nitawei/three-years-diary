@@ -59,6 +59,14 @@ const SyncManager = {
     localStorage.setItem('sync_retry_queue', JSON.stringify(queue));
   },
   addToQueue(action, data) {
+    // INTENT VALIDATION: Destructive delete_diary actions MUST require explicit user action intent
+    if (action === 'delete_diary') {
+      const isValidUserIntent = data && data.source === 'user_action' && data.confirmed === true;
+      if (!isValidUserIntent) {
+        console.warn('[SyncManager] REJECTED unconfirmed destructive delete_diary task:', { action, data });
+        return;
+      }
+    }
     const queue = this.getQueue();
     queue.push({
       id: Math.random().toString(36).substring(2, 9),
@@ -1279,8 +1287,8 @@ function setupEventListeners() {
         }, State.currentUser);
         SyncManager.addToQueue('save_diary', { date: State.activeDate, content: textarea.value, mood: State.selectedMood });
       } else {
-        await DiaryDB.deleteDiary(State.activeDate, State.currentUser);
-        SyncManager.addToQueue('delete_diary', { date: State.activeDate });
+        // SAFE EMPTY STATE: Blur on empty textarea MUST NEVER issue a cloud delete_diary task
+        localStorage.removeItem(`draft_diary_${State.currentUser}_${State.activeDate}`);
       }
     });
 
@@ -3321,7 +3329,7 @@ function createDiaryReviewCard(dateStr, diary) {
       
       try {
         await DiaryDB.deleteDiary(dateStr, State.currentUser);
-        SyncManager.addToQueue('delete_diary', { date: dateStr });
+        SyncManager.addToQueue('delete_diary', { date: dateStr, source: 'user_action', confirmed: true });
         
         if (dateStr === State.activeDate) {
           const textarea = document.getElementById('diary-textarea');
@@ -3465,7 +3473,7 @@ async function renderPreviousYearsReview() {
               // 清理草稿與寫入同步佇列
               localStorage.removeItem(`draft_diary_${State.currentUser}_${targetDateStr}`);
               localStorage.removeItem(`draft_mood_${State.currentUser}_${targetDateStr}`);
-              SyncManager.addToQueue('delete_diary', { date: targetDateStr });
+              SyncManager.addToQueue('delete_diary', { date: targetDateStr, source: 'user_action', confirmed: true });
               
               alert('日記已成功刪除。');
             } catch (delErr) {

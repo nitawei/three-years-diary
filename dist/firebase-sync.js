@@ -970,8 +970,12 @@
             }, { merge: true });
           }
         } else if (item.action === 'delete_diary') {
-          if (item.data && item.data.date) {
+          const isValidIntent = item.data && item.data.source === 'user_action' && item.data.confirmed === true;
+          if (isValidIntent && item.data.date) {
+            console.log(`[Firebase SyncManager] EXPLICIT USER INTENT CONFIRMED: Deleting cloud diary for date ${item.data.date}`);
             await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
+          } else {
+            console.warn('[Firebase SyncManager] DISCARDING unconfirmed delete_diary task without touching Cloud Firestore:', item);
           }
         } else if (item.action === 'save_memo' || item.action === 'delete_memo') {
           if (item.data && item.data.date) {
