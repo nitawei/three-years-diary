@@ -182,7 +182,32 @@
     currentConnectedAt = null;
   }
 
-  // Push all local user diaries from IndexedDB up to Cloud Firestore (Ensure no unsynced local data)
+/*
+ =========================================================================
+ SYNC DIRECTION & DATA INTEGRITY POLICY
+ =========================================================================
+ 1. Startup / Login Sync:
+    - Direction: Cloud Firestore -> Local IndexedDB ONLY.
+    - Cloud Firestore is the 100% Single Source of Truth.
+    - NEVER push unverified local IndexedDB cache or legacy mock data to Cloud Firestore.
+
+ 2. User Action Sync (Online/Offline):
+    - Direction: Local -> Cloud Firestore (Allowed ONLY via explicit user actions).
+    - Triggered ONLY when user explicitly clicks Save, Delete (with confirm), or edits content.
+
+ 3. Reconnect Queue:
+    - Processes pending user-initiated offline actions queued in SyncManager.
+
+ 4. Prohibition:
+    - NEVER invoke pushLocalDiariesToFirestore() during initialization or startup.
+ =========================================================================
+*/
+
+  /**
+   * @deprecated
+   * NEVER call during initialization or automatic startup sync.
+   * Reserved strictly for explicit manual recovery / migration flows.
+   */
   async function pushLocalDiariesToFirestore(uid) {
     if (!uid || !window.db) return;
     console.log("[Sync Push] Scanning local diaries to upload to Cloud Firestore...");
@@ -214,12 +239,9 @@
 
   // Sync All user diaries & memos from Firestore to IndexedDB (One-time on login)
   async function syncAllFromFirestore(uid) {
-    console.log("[Sync] Pulling diaries and memos from Firestore...");
+    console.log("[Sync] Pulling diaries and memos from Firestore (Single Source of Truth)...");
     try {
-      // 1. First upload any local unsynced diaries to Cloud Firestore
-      await pushLocalDiariesToFirestore(uid);
-
-      // 2. Sync diaries
+      // 1. Sync diaries from Cloud Firestore to IndexedDB
       const diariesSnap = await window.db.collection('users').doc(uid).collection('diaries').get();
       diariesSnap.forEach(async (doc) => {
         const data = doc.data();
