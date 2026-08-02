@@ -66,6 +66,7 @@ const SyncManager = {
         console.warn('[SyncManager] REJECTED unconfirmed destructive delete_diary task:', { action, data });
         return;
       }
+      console.log('[SyncManager] DELETE REQUEST CREATED & INTENT VALIDATED:', { date: data.date, source: data.source, confirmed: data.confirmed });
     }
     const queue = this.getQueue();
     queue.push({
@@ -2980,7 +2981,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
           // 清理草稿與寫入同步佇列
           localStorage.removeItem(`draft_diary_${State.currentUser}_${dateStr}`);
           localStorage.removeItem(`draft_mood_${State.currentUser}_${dateStr}`);
-          SyncManager.addToQueue('delete_diary', { date: dateStr });
+          SyncManager.addToQueue('delete_diary', { date: dateStr, source: 'user_action', confirmed: true });
           
           await updateGardenDotsColor();
           await checkThreeYearCompletion();

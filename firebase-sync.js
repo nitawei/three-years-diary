@@ -972,8 +972,14 @@
         } else if (item.action === 'delete_diary') {
           const isValidIntent = item.data && item.data.source === 'user_action' && item.data.confirmed === true;
           if (isValidIntent && item.data.date) {
-            console.log(`[Firebase SyncManager] EXPLICIT USER INTENT CONFIRMED: Deleting cloud diary for date ${item.data.date}`);
-            await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
+            console.log(`[Firebase SyncManager] VALIDATION PASSED: Executing Firestore delete for date: ${item.data.date}`);
+            try {
+              await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
+              console.log(`[Firebase SyncManager] CLOUD DELETE SUCCESS for date: ${item.data.date}`);
+            } catch (delErr) {
+              console.error(`[Firebase SyncManager] CLOUD DELETE FAILURE for date: ${item.data.date}`, delErr);
+              throw delErr;
+            }
           } else {
             console.warn('[Firebase SyncManager] DISCARDING unconfirmed delete_diary task without touching Cloud Firestore:', item);
           }
@@ -1592,7 +1598,7 @@
         
         try {
           await DiaryDB.deleteDiary(dateStr, userId);
-          SyncManager.addToQueue('delete_diary', { date: dateStr });
+          SyncManager.addToQueue('delete_diary', { date: dateStr, source: 'user_action', confirmed: true });
           
           if (dateStr === State.activeDate) {
             const textarea = document.getElementById('diary-textarea');
