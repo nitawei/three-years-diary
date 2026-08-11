@@ -669,6 +669,37 @@
           儲存日記
         </button>
         
+  <!-- 隨筆相片全螢幕檢視器 (In-App Photo Viewer / Lightbox) -->
+  <div class="photo-viewer-modal hidden" id="photo-viewer-modal">
+    <div class="photo-viewer-overlay" id="photo-viewer-overlay"></div>
+    <button class="photo-viewer-close" id="btn-close-photo-viewer" title="關閉">
+      <i data-lucide="x"></i>
+    </button>
+    <div class="photo-viewer-container" id="photo-viewer-container">
+      <img id="photo-viewer-img" src="" alt="隨筆原圖" />
+    </div>
+  </div>
+
+  <!-- 隨筆相片 16:9 裁切器 (16:9 Crop Modal) -->
+  <div class="photo-crop-modal hidden" id="photo-crop-modal">
+    <div class="photo-crop-overlay" id="photo-crop-overlay"></div>
+    <div class="photo-crop-dialog">
+      <div class="photo-crop-header">
+        <span class="photo-crop-title" id="photo-crop-title">調整相片 (16:9)</span>
+        <span class="photo-crop-counter" id="photo-crop-counter">1 / 1</span>
+      </div>
+      <div class="photo-crop-body">
+        <div class="photo-crop-viewport" id="photo-crop-viewport">
+          <img class="photo-crop-img" id="photo-crop-img" src="" alt="裁切預覽" />
+        </div>
+      </div>
+      <div class="photo-crop-controls">
+        <span class="photo-crop-label">縮放</span>
+        <input type="range" id="photo-crop-zoom" min="1" max="3" step="0.01" value="1" class="photo-crop-slider" />
+      </div>
+      <div class="photo-crop-footer">
+        <button type="button" class="btn-crop-cancel" id="btn-crop-cancel">取消</button>
+        <button type="button" class="btn-crop-confirm" id="btn-crop-confirm">確認</button>
       </div>
     </div>
   </div>

@@ -1027,34 +1027,33 @@ async function loadTodayData() {
                 const imgGrid = document.createElement('div');
                 imgGrid.className = 'timeline-images-grid';
                 
-                memo.images.forEach(base64 => {
+                memo.images.forEach(imgData => {
                   const wrapper = document.createElement('div');
                   wrapper.className = 'timeline-image-wrapper';
+                  
+                  const { original, hasCrop, crop } = parseMemoImageData(imgData);
+                  const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                  
                   const img = document.createElement('img');
-                  const safeSrc = isSafeImageUri(base64) ? base64 : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                   img.src = safeSrc;
                   img.loading = 'lazy'; // Lazy-load images
                   img.alt = '筆友隨筆圖片';
-                  img.addEventListener('click', () => {
-                    const w = window.open();
-                    if (w) {
-                      const body = w.document.body;
-                      body.style.margin = '0';
-                      body.style.backgroundColor = '#000';
-                      body.style.display = 'flex';
-                      body.style.alignItems = 'center';
-                      body.style.justifyContent = 'center';
-                      body.style.height = '100vh';
-                      
-                      const largeImg = w.document.createElement('img');
-                      largeImg.src = safeSrc;
-                      largeImg.style.maxWidth = '100%';
-                      largeImg.style.maxHeight = '100vh';
-                      largeImg.style.display = 'block';
-                      largeImg.style.margin = 'auto';
-                      body.appendChild(largeImg);
+
+                  if (hasCrop && crop) {
+                    const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+                    const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+                    const sc = crop.scale !== undefined ? crop.scale : 1;
+                    img.style.objectPosition = `${px}% ${py}%`;
+                    if (sc > 1.001) {
+                      img.style.transform = `scale(${sc})`;
+                      img.style.transformOrigin = `${px}% ${py}%`;
                     }
+                  }
+
+                  img.addEventListener('click', () => {
+                    openPhotoViewer(safeSrc);
                   });
+                  
                   wrapper.appendChild(img);
                   imgGrid.appendChild(wrapper);
                 });
@@ -1138,32 +1137,30 @@ async function renderMemoTimeline() {
       memo.images.forEach(imgData => {
         const imgWrapper = document.createElement('div');
         imgWrapper.className = 'timeline-image-wrapper';
+        
+        const { original, hasCrop, crop } = parseMemoImageData(imgData);
+        const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
         const img = document.createElement('img');
-        const safeSrc = isSafeImageUri(imgData) ? imgData : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         img.src = safeSrc;
         img.loading = 'lazy'; // Lazy-load images
         img.alt = '時光隨筆圖片';
-        img.addEventListener('click', () => {
-          // 極簡點擊看大圖
-          const win = window.open();
-          if (win) {
-            const body = win.document.body;
-            body.style.margin = '0';
-            body.style.backgroundColor = '#000';
-            body.style.display = 'flex';
-            body.style.alignItems = 'center';
-            body.style.justifyContent = 'center';
-            body.style.height = '100vh';
-            
-            const largeImg = win.document.createElement('img');
-            largeImg.src = safeSrc;
-            largeImg.style.maxWidth = '100%';
-            largeImg.style.maxHeight = '100vh';
-            largeImg.style.display = 'block';
-            largeImg.style.margin = 'auto';
-            body.appendChild(largeImg);
+
+        if (hasCrop && crop) {
+          const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+          const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+          const sc = crop.scale !== undefined ? crop.scale : 1;
+          img.style.objectPosition = `${px}% ${py}%`;
+          if (sc > 1.001) {
+            img.style.transform = `scale(${sc})`;
+            img.style.transformOrigin = `${px}% ${py}%`;
           }
+        }
+
+        img.addEventListener('click', () => {
+          openPhotoViewer(safeSrc);
         });
+
         imgWrapper.appendChild(img);
         imgGrid.appendChild(imgWrapper);
       });
@@ -1491,6 +1488,26 @@ function setupEventListeners() {
       }
     });
   }
+
+  // === 隨筆相片檢視器 (Lightbox) 事件監聽 ===
+  const btnClosePhotoViewer = document.getElementById('btn-close-photo-viewer');
+  const photoViewerOverlay = document.getElementById('photo-viewer-overlay');
+  const photoViewerModal = document.getElementById('photo-viewer-modal');
+
+  if (btnClosePhotoViewer) {
+    btnClosePhotoViewer.addEventListener('click', closePhotoViewer);
+  }
+  if (photoViewerOverlay) {
+    photoViewerOverlay.addEventListener('click', closePhotoViewer);
+  }
+  if (photoViewerModal) {
+    photoViewerModal.addEventListener('click', (e) => {
+      if (e.target === photoViewerModal) closePhotoViewer();
+    });
+  }
+
+  // === 隨筆相片 16:9 裁切器手勢與操作事件 ===
+  setupCropGestures();
 
   // === 伴侶日記與角色切換事件監聽 ===
   const profileSwitcher = document.getElementById('profile-switcher');
@@ -2576,6 +2593,218 @@ function setupEventListeners() {
   }
 }
 
+// ==================== 隨筆相片解析與 App 內置 Lightbox ====================
+function parseMemoImageData(item) {
+  if (!item) return { original: '', hasCrop: false, crop: null };
+  if (typeof item === 'string') {
+    return { original: item, hasCrop: false, crop: null };
+  }
+  if (typeof item === 'object') {
+    const original = item.original || item.url || '';
+    return { original, hasCrop: Boolean(item.crop), crop: item.crop || null };
+  }
+  return { original: '', hasCrop: false, crop: null };
+}
+window.parseMemoImageData = parseMemoImageData;
+
+function openPhotoViewer(imgSrc) {
+  if (!imgSrc) return;
+  const modal = document.getElementById('photo-viewer-modal');
+  const imgEl = document.getElementById('photo-viewer-img');
+  if (!modal || !imgEl) return;
+  
+  imgEl.src = imgSrc;
+  modal.classList.remove('hidden');
+}
+window.openPhotoViewer = openPhotoViewer;
+
+function closePhotoViewer() {
+  const modal = document.getElementById('photo-viewer-modal');
+  const imgEl = document.getElementById('photo-viewer-img');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  if (imgEl) imgEl.src = '';
+}
+window.closePhotoViewer = closePhotoViewer;
+
+// ==================== 隨筆相片 16:9 裁切系統 ====================
+let cropQueue = [];
+let currentCropIndex = 0;
+let currentCropState = {
+  original: '',
+  xPercent: 50,
+  yPercent: 50,
+  scale: 1
+};
+let isCropDragging = false;
+let cropDragStartX = 0;
+let cropDragStartY = 0;
+let cropInitialXPercent = 50;
+let cropInitialYPercent = 50;
+
+function startCropQueue(images) {
+  if (!images || !images.length) return;
+  cropQueue = images;
+  currentCropIndex = 0;
+  openCropStep(0);
+}
+
+function openCropStep(index) {
+  if (index >= cropQueue.length) {
+    closeCropModal();
+    renderUploadedImages();
+    return;
+  }
+
+  currentCropIndex = index;
+  const originalSrc = cropQueue[index];
+  currentCropState = {
+    original: originalSrc,
+    xPercent: 50,
+    yPercent: 50,
+    scale: 1
+  };
+
+  const modal = document.getElementById('photo-crop-modal');
+  const imgEl = document.getElementById('photo-crop-img');
+  const counterEl = document.getElementById('photo-crop-counter');
+  const zoomSlider = document.getElementById('photo-crop-zoom');
+
+  if (counterEl) {
+    counterEl.textContent = `${index + 1} / ${cropQueue.length}`;
+  }
+  if (zoomSlider) {
+    zoomSlider.value = '1';
+  }
+
+  if (imgEl) {
+    imgEl.src = originalSrc;
+    updateCropPreview();
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
+}
+
+function updateCropPreview() {
+  const imgEl = document.getElementById('photo-crop-img');
+  if (!imgEl) return;
+  const { xPercent, yPercent, scale } = currentCropState;
+  imgEl.style.objectPosition = `${xPercent}% ${yPercent}%`;
+  imgEl.style.transform = `scale(${scale})`;
+  imgEl.style.transformOrigin = `${xPercent}% ${yPercent}%`;
+}
+
+function closeCropModal() {
+  const modal = document.getElementById('photo-crop-modal');
+  if (modal) modal.classList.add('hidden');
+  cropQueue = [];
+  currentCropIndex = 0;
+}
+
+function setupCropGestures() {
+  const viewport = document.getElementById('photo-crop-viewport');
+  const zoomSlider = document.getElementById('photo-crop-zoom');
+  const btnConfirm = document.getElementById('btn-crop-confirm');
+  const btnCancel = document.getElementById('btn-crop-cancel');
+  const overlay = document.getElementById('photo-crop-overlay');
+
+  if (zoomSlider) {
+    zoomSlider.addEventListener('input', (e) => {
+      currentCropState.scale = parseFloat(e.target.value) || 1;
+      updateCropPreview();
+    });
+  }
+
+  if (viewport) {
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isCropDragging = true;
+        cropDragStartX = e.touches[0].clientX;
+        cropDragStartY = e.touches[0].clientY;
+        cropInitialXPercent = currentCropState.xPercent;
+        cropInitialYPercent = currentCropState.yPercent;
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (!isCropDragging || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - cropDragStartX;
+      const dy = e.touches[0].clientY - cropDragStartY;
+      const rect = viewport.getBoundingClientRect();
+      const sensitivity = 100 / (rect.width || 300);
+
+      currentCropState.xPercent = Math.min(Math.max(cropInitialXPercent - dx * sensitivity, 0), 100);
+      currentCropState.yPercent = Math.min(Math.max(cropInitialYPercent - dy * sensitivity, 0), 100);
+      updateCropPreview();
+    }, { passive: true });
+
+    viewport.addEventListener('touchend', () => {
+      isCropDragging = false;
+    });
+
+    viewport.addEventListener('mousedown', (e) => {
+      isCropDragging = true;
+      cropDragStartX = e.clientX;
+      cropDragStartY = e.clientY;
+      cropInitialXPercent = currentCropState.xPercent;
+      cropInitialYPercent = currentCropState.yPercent;
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isCropDragging) return;
+      const dx = e.clientX - cropDragStartX;
+      const dy = e.clientY - cropDragStartY;
+      const rect = viewport.getBoundingClientRect();
+      const sensitivity = 100 / (rect.width || 300);
+
+      currentCropState.xPercent = Math.min(Math.max(cropInitialXPercent - dx * sensitivity, 0), 100);
+      currentCropState.yPercent = Math.min(Math.max(cropInitialYPercent - dy * sensitivity, 0), 100);
+      updateCropPreview();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isCropDragging = false;
+    });
+  }
+
+  if (btnConfirm) {
+    btnConfirm.addEventListener('click', () => {
+      const croppedItem = {
+        original: currentCropState.original,
+        crop: {
+          xPercent: Math.round(currentCropState.xPercent * 10) / 10,
+          yPercent: Math.round(currentCropState.yPercent * 10) / 10,
+          scale: Math.round(currentCropState.scale * 100) / 100,
+          aspect: '16:9'
+        }
+      };
+      State.uploadedImages.push(croppedItem);
+      openCropStep(currentCropIndex + 1);
+    });
+  }
+
+  if (btnCancel) {
+    btnCancel.addEventListener('click', () => {
+      closeCropModal();
+      renderUploadedImages();
+    });
+  }
+
+  if (overlay) {
+    overlay.addEventListener('click', () => {
+      closeCropModal();
+      renderUploadedImages();
+    });
+  }
+}
+window.startCropQueue = startCropQueue;
+window.openCropStep = openCropStep;
+window.updateCropPreview = updateCropPreview;
+window.closeCropModal = closeCropModal;
+
 // ==================== 備忘錄圖片壓縮與預覽 ====================
 function handleImageUpload(e) {
   const files = Array.from(e.target.files);
@@ -2584,38 +2813,49 @@ function handleImageUpload(e) {
   const currentCount = State.uploadedImages.length;
   if (currentCount + files.length > 9) { // 隨筆放寬圖片限制
     alert('為了保持版面的簡潔，單則備忘錄最多支援上傳 9 張圖片。');
+    e.target.value = '';
     return;
   }
 
-  files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const maxDim = 600;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
-          } else {
-            w = Math.round((w * maxDim) / h);
-            h = maxDim;
+  const readPromises = files.map(file => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const maxDim = 1200; // 保留清晰原圖供 Lightbox 查看
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
           }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        ctx.drawImage(img, 0, 0, w, h);
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        State.uploadedImages.push(compressedBase64);
-        renderUploadedImages();
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(compressedBase64);
+        };
+        img.onerror = () => resolve(event.target.result);
       };
-    };
-    reader.readAsDataURL(file);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  });
+
+  Promise.all(readPromises).then(results => {
+    const validImages = results.filter(Boolean);
+    if (validImages.length > 0) {
+      startCropQueue(validImages);
+    }
   });
 
   e.target.value = '';
@@ -2633,19 +2873,34 @@ function renderUploadedImages() {
   }
 
   const fragment = document.createDocumentFragment();
-  State.uploadedImages.forEach((base64, index) => {
+  State.uploadedImages.forEach((imgData, index) => {
     const wrapper = document.createElement('div');
     wrapper.className = 'memo-image-wrapper';
     
+    const { original, hasCrop, crop } = parseMemoImageData(imgData);
+    const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
     const img = document.createElement('img');
-    img.src = isSafeImageUri(base64) ? base64 : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    img.src = safeSrc;
     img.loading = 'lazy'; // Lazy-load images
     img.alt = '上傳相片';
+
+    if (hasCrop && crop) {
+      const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+      const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+      const sc = crop.scale !== undefined ? crop.scale : 1;
+      img.style.objectPosition = `${px}% ${py}%`;
+      if (sc > 1.001) {
+        img.style.transform = `scale(${sc})`;
+        img.style.transformOrigin = `${px}% ${py}%`;
+      }
+    }
     
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-remove-image';
     removeBtn.innerHTML = '&times;';
-    removeBtn.onclick = () => {
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
       State.uploadedImages.splice(index, 1);
       renderUploadedImages();
     };
@@ -3500,35 +3755,31 @@ function renderReviewMemoTimeline(memos) {
       imgGrid.className = 'timeline-images-grid';
       imgGrid.style.marginTop = '6px';
       
-      memo.images.forEach(base64 => {
+      memo.images.forEach(imgData => {
         const wrapper = document.createElement('div');
         wrapper.className = 'timeline-image-wrapper';
         
+        const { original, hasCrop, crop } = parseMemoImageData(imgData);
+        const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        
         const img = document.createElement('img');
-        const safeSrc = isSafeImageUri(base64) ? base64 : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         img.src = safeSrc;
         img.loading = 'lazy';
         img.alt = '隨筆相片';
-        
-        img.addEventListener('click', () => {
-          const w = window.open();
-          if (w) {
-            const b = w.document.body;
-            b.style.margin = '0';
-            b.style.backgroundColor = '#000';
-            b.style.display = 'flex';
-            b.style.alignItems = 'center';
-            b.style.justifyContent = 'center';
-            b.style.height = '100vh';
-            
-            const largeImg = w.document.createElement('img');
-            largeImg.src = safeSrc;
-            largeImg.style.maxWidth = '100%';
-            largeImg.style.maxHeight = '100vh';
-            largeImg.style.display = 'block';
-            largeImg.style.margin = 'auto';
-            b.appendChild(largeImg);
+
+        if (hasCrop && crop) {
+          const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+          const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+          const sc = crop.scale !== undefined ? crop.scale : 1;
+          img.style.objectPosition = `${px}% ${py}%`;
+          if (sc > 1.001) {
+            img.style.transform = `scale(${sc})`;
+            img.style.transformOrigin = `${px}% ${py}%`;
           }
+        }
+
+        img.addEventListener('click', () => {
+          openPhotoViewer(safeSrc);
         });
         
         wrapper.appendChild(img);
@@ -4636,7 +4887,8 @@ function generateExportHTMLForArchive(archive) {
                 const isMulti = m.images.length > 1;
                 tableHtml += `<div class="pdf-thumbnail-grid${isMulti ? ' multi-photos' : ''}">`;
                 m.images.forEach(img => {
-                  const safeImg = isSafeImageUri(img) ? img : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                  const { original } = parseMemoImageData(img);
+                  const safeImg = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                   tableHtml += `<img src="${safeImg}" class="pdf-thumbnail">`;
                 });
                 tableHtml += `</div>`;
