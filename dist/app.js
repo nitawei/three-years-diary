@@ -1825,7 +1825,7 @@ function setupEventListeners() {
   };
 
   // === 統一分頁切換控制器 (switchToPage) ===
-  window.switchToPage = async function(pageName, customDate = null, animated = false) {
+  const switchToPage = async function(pageName, customDate = null, animated = false) {
     const currentPage = getCurrentActivePage();
 
     // 離開頁面時自動收回/關閉所有全螢幕或半螢幕抽屜與彈窗
@@ -1940,6 +1940,7 @@ function setupEventListeners() {
       await loadTodayData();
     }
   };
+  window.switchToPage = switchToPage;
 
   // === 時光花園、週記回顧、今日書寫、交換日記分頁切換控制 (IG 限動橫線指標) ===
   const barToday = document.getElementById('bar-today');
@@ -1977,15 +1978,8 @@ function setupEventListeners() {
       isSwipeCancelled = false;
       activeIdx = -1;
       targetIdx = -1;
-      if (activeEl) {
-        clearPageTransforms(activeEl);
-        activeEl = null;
-      }
-      if (targetEl) {
-        targetEl.classList.add('hidden');
-        clearPageTransforms(targetEl);
-        targetEl = null;
-      }
+      activeEl = null;
+      targetEl = null;
       isAnimating = false;
     };
 
@@ -2150,9 +2144,8 @@ function setupEventListeners() {
           clearPageTransforms(activeEl);
           clearPageTransforms(targetEl);
           const newPageName = PAGE_ORDER[targetIdx];
-          await switchToPage(newPageName);
-          isAnimating = false;
           resetSwipe();
+          await switchToPage(newPageName);
         }, 260);
       } else {
         activeEl.classList.add('slide-transition');
@@ -2171,7 +2164,6 @@ function setupEventListeners() {
             targetEl.classList.add('hidden');
             clearPageTransforms(targetEl);
           }
-          isAnimating = false;
           resetSwipe();
         }, 260);
       }
