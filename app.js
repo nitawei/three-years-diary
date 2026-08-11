@@ -354,6 +354,16 @@ async function handleRouting() {
   if (onboardingPage) onboardingPage.classList.add('hidden');
   if (partnerPage) partnerPage.classList.add('hidden');
   
+  // 清理可能殘留的滑動 Transform 狀態
+  [todayPage, weeklyPage, gardenPage, partnerPage].forEach(p => {
+    if (p) {
+      p.classList.remove('slide-transition');
+      p.style.transform = '';
+      p.style.opacity = '';
+      p.style.zIndex = '';
+    }
+  });
+  
   if (currentHash === 'today') {
     if (todayPage) todayPage.classList.remove('hidden');
     if (weeklyPage) weeklyPage.classList.add('hidden');
@@ -1770,8 +1780,36 @@ function setupEventListeners() {
     });
   }
 
+  // === 統一分頁清單與順序 (Yearly -> Weekly -> Today -> Exchange) ===
+  const PAGE_ORDER = ['garden', 'weekly', 'today', 'partner'];
+  const getPageEl = (name) => document.getElementById(name + '-page');
+
+  const getCurrentActivePage = () => {
+    const barGarden = document.getElementById('bar-garden');
+    const barWeekly = document.getElementById('bar-weekly');
+    const barToday = document.getElementById('bar-today');
+    const barPartner = document.getElementById('bar-partner');
+    if (barGarden && barGarden.classList.contains('active')) return 'garden';
+    if (barWeekly && barWeekly.classList.contains('active')) return 'weekly';
+    if (barToday && barToday.classList.contains('active')) return 'today';
+    if (barPartner && barPartner.classList.contains('active')) return 'partner';
+    const hash = window.location.hash.substring(1);
+    if (PAGE_ORDER.includes(hash)) return hash;
+    return 'today';
+  };
+
+  const clearPageTransforms = (el) => {
+    if (!el) return;
+    el.classList.remove('slide-transition');
+    el.style.transform = '';
+    el.style.opacity = '';
+    el.style.zIndex = '';
+  };
+
   // === 統一分頁切換控制器 (switchToPage) ===
-  window.switchToPage = async function(pageName, customDate = null) {
+  window.switchToPage = async function(pageName, customDate = null, animated = false) {
+    const currentPage = getCurrentActivePage();
+
     // 離開頁面時自動收回/關閉所有全螢幕或半螢幕抽屜與彈窗
     const memoDrawer = document.getElementById('memo-drawer');
     if (memoDrawer) {
@@ -1803,17 +1841,63 @@ function setupEventListeners() {
 
     if (!barToday || !barWeekly || !barGarden || !barPartner || !todayPage || !weeklyPage || !gardenPage || !partnerPage) return;
 
+    // 若指定 animated 且分頁不同，播放平滑紙張滑動
+    if (animated && currentPage !== pageName) {
+      const fromIdx = PAGE_ORDER.indexOf(currentPage);
+      const toIdx = PAGE_ORDER.indexOf(pageName);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const fromEl = getPageEl(currentPage);
+        const toEl = getPageEl(pageName);
+        if (fromEl && toEl) {
+          const deviceFrame = document.querySelector('.device-frame');
+          const width = deviceFrame ? deviceFrame.getBoundingClientRect().width : window.innerWidth;
+          const isForward = toIdx > fromIdx;
+
+          toEl.classList.remove('hidden');
+          toEl.style.transform = `translate3d(${isForward ? width : -width}px, 0, 0) scale(0.98)`;
+          toEl.style.opacity = '0.96';
+          toEl.style.zIndex = '1';
+
+          fromEl.style.transform = 'translate3d(0, 0, 0) scale(1)';
+          fromEl.style.opacity = '1';
+          fromEl.style.zIndex = '2';
+
+          void toEl.offsetWidth; // Force reflow
+
+          fromEl.classList.add('slide-transition');
+          toEl.classList.add('slide-transition');
+
+          fromEl.style.transform = `translate3d(${isForward ? -width : width}px, 0, 0) scale(0.98)`;
+          fromEl.style.opacity = '0.96';
+
+          toEl.style.transform = 'translate3d(0, 0, 0) scale(1)';
+          toEl.style.opacity = '1';
+
+          await new Promise(resolve => setTimeout(resolve, 260));
+
+          clearPageTransforms(fromEl);
+          clearPageTransforms(toEl);
+          fromEl.classList.add('hidden');
+        }
+      }
+    }
+
     // 重設高亮狀態
     barToday.classList.remove('active');
     barWeekly.classList.remove('active');
     barGarden.classList.remove('active');
     barPartner.classList.remove('active');
 
-    // 隱藏所有分頁
+    // 隱藏所有分頁 (若未經動畫已先清理)
     todayPage.classList.add('hidden');
     weeklyPage.classList.add('hidden');
     gardenPage.classList.add('hidden');
     partnerPage.classList.add('hidden');
+
+    clearPageTransforms(todayPage);
+    clearPageTransforms(weeklyPage);
+    clearPageTransforms(gardenPage);
+    clearPageTransforms(partnerPage);
 
     if (pageName === 'today') {
       barToday.classList.add('active');
@@ -1846,58 +1930,248 @@ function setupEventListeners() {
   const barPartner = document.getElementById('bar-partner');
 
   if (barToday && barWeekly && barGarden && barPartner) {
-    barToday.addEventListener('click', () => switchToPage('today'));
-    barWeekly.addEventListener('click', () => switchToPage('weekly'));
-    barGarden.addEventListener('click', () => switchToPage('garden'));
-    barPartner.addEventListener('click', () => switchToPage('partner'));
+    barToday.addEventListener('click', () => switchToPage('today', null, true));
+    barWeekly.addEventListener('click', () => switchToPage('weekly', null, true));
+    barGarden.addEventListener('click', () => switchToPage('garden', null, true));
+    barPartner.addEventListener('click', () => switchToPage('partner', null, true));
   }
 
-  // === 左右側點擊切換分頁 (Instagram Story 模式) ===
+  // === 左右滑動手勢導航 (Soft Paper Slide Gesture Controller) ===
   const deviceFrame = document.querySelector('.device-frame');
   if (deviceFrame) {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let isSwiping = false;
+    let isDirectionLocked = false;
+    let isSwipeCancelled = false;
+    let activeIdx = -1;
+    let targetIdx = -1;
+    let activeEl = null;
+    let targetEl = null;
+    let frameWidth = 0;
+    let isAnimating = false;
+
+    const resetSwipe = () => {
+      isSwiping = false;
+      isDirectionLocked = false;
+      isSwipeCancelled = false;
+      activeIdx = -1;
+      targetIdx = -1;
+      activeEl = null;
+      targetEl = null;
+    };
+
+    // TouchStart
+    deviceFrame.addEventListener('touchstart', (e) => {
+      if (isAnimating) return;
+
+      const session = getSession();
+      if (!session || !State.splashDismissed) return;
+      if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash') return;
+
+      // 檢查是否有打開彈窗或抽屜
+      const openModal = document.querySelector('.garden-modal-overlay:not(.hidden), .memo-drawer:not(.hidden), .backup-passcode-modal:not(.hidden)');
+      if (openModal) return;
+
+      // 檢查是否為可互動元素或輸入框
+      const isInteractive = e.target.closest('textarea, input, select, button, a, .manuscript-cell, .garden-dot, .diary-review-card, .btn-circle-plus, .timeline-item, .timeline-image-wrapper, .mood-dot, .btn-close-modal, .story-bar, .modal-sheet, .garden-modal-sheet, .memo-drawer-content');
+      if (isInteractive) return;
+
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = Date.now();
+
+      isSwiping = false;
+      isDirectionLocked = false;
+      isSwipeCancelled = false;
+
+      const currentName = getCurrentActivePage();
+      activeIdx = PAGE_ORDER.indexOf(currentName);
+      if (activeIdx === -1) activeIdx = 2; // Default to 'today'
+
+      targetIdx = -1;
+      activeEl = getPageEl(PAGE_ORDER[activeIdx]);
+      targetEl = null;
+      frameWidth = deviceFrame.getBoundingClientRect().width || window.innerWidth;
+    }, { passive: true });
+
+    // TouchMove
+    deviceFrame.addEventListener('touchmove', (e) => {
+      if (isAnimating || isSwipeCancelled || !activeEl) return;
+
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+
+      // 方向鎖定判斷 (區分垂直滾動與水平滑動)
+      if (!isDirectionLocked) {
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 7) {
+          isSwipeCancelled = true; // 垂直滾動：取消滑動，允許原生滾動
+          return;
+        }
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+          isDirectionLocked = true;
+          isSwiping = true;
+        } else {
+          return;
+        }
+      }
+
+      if (e.cancelable) e.preventDefault();
+
+      // 計算目標分頁索引 (向左滑 dx < 0 ➔ 下一頁 activeIdx + 1；向右滑 dx > 0 ➔ 上一頁 activeIdx - 1)
+      const intendedTargetIdx = dx < 0 ? activeIdx + 1 : activeIdx - 1;
+
+      // 邊界阻尼 (Yearly 右滑不切換；Exchange 左滑不切換)
+      if (intendedTargetIdx < 0 || intendedTargetIdx >= PAGE_ORDER.length) {
+        const resistanceDx = dx * 0.2;
+        activeEl.style.transform = `translate3d(${resistanceDx}px, 0, 0)`;
+        activeEl.style.opacity = '1';
+        activeEl.style.zIndex = '2';
+        if (targetEl) {
+          targetEl.classList.add('hidden');
+          clearPageTransforms(targetEl);
+          targetEl = null;
+        }
+        targetIdx = -1;
+        return;
+      }
+
+      // 更新目標元素
+      if (targetIdx !== intendedTargetIdx) {
+        if (targetEl) {
+          targetEl.classList.add('hidden');
+          clearPageTransforms(targetEl);
+        }
+        targetIdx = intendedTargetIdx;
+        targetEl = getPageEl(PAGE_ORDER[targetIdx]);
+        if (targetEl) {
+          targetEl.classList.remove('hidden');
+        }
+      }
+
+      if (!targetEl) return;
+
+      // 即時跟手與輕微紙張層疊 (Soft Paper Slide)
+      const progress = Math.min(Math.abs(dx) / frameWidth, 1);
+      const outScale = 1 - progress * 0.02;
+      const outOpacity = 1 - progress * 0.04;
+      activeEl.style.transform = `translate3d(${dx}px, 0, 0) scale(${outScale})`;
+      activeEl.style.opacity = `${outOpacity}`;
+      activeEl.style.zIndex = '2';
+
+      const inOffset = dx < 0 ? (frameWidth + dx) : (-frameWidth + dx);
+      const inScale = 0.98 + progress * 0.02;
+      const inOpacity = 0.96 + progress * 0.04;
+      targetEl.style.transform = `translate3d(${inOffset}px, 0, 0) scale(${inScale})`;
+      targetEl.style.opacity = `${inOpacity}`;
+      targetEl.style.zIndex = '1';
+    }, { passive: false });
+
+    // TouchEnd & TouchCancel
+    const handleTouchEnd = (e) => {
+      if (isAnimating || !isSwiping || !activeEl) {
+        resetSwipe();
+        return;
+      }
+
+      const touch = e.changedTouches ? e.changedTouches[0] : e;
+      const dx = touch.clientX - touchStartX;
+      const duration = Date.now() - touchStartTime;
+      const velocity = Math.abs(dx) / Math.max(duration, 1);
+
+      const SWIPE_THRESHOLD = frameWidth * 0.25; // 25% 門檻
+      const isQuickFlick = velocity > 0.4 && Math.abs(dx) > 30;
+      const shouldSwitch = (Math.abs(dx) > SWIPE_THRESHOLD || isQuickFlick) && targetIdx !== -1 && targetEl;
+
+      isAnimating = true;
+
+      if (shouldSwitch) {
+        activeEl.classList.add('slide-transition');
+        targetEl.classList.add('slide-transition');
+
+        const finalActiveX = dx < 0 ? -frameWidth : frameWidth;
+        activeEl.style.transform = `translate3d(${finalActiveX}px, 0, 0) scale(0.98)`;
+        activeEl.style.opacity = '0.96';
+
+        targetEl.style.transform = `translate3d(0, 0, 0) scale(1)`;
+        targetEl.style.opacity = '1';
+
+        setTimeout(async () => {
+          clearPageTransforms(activeEl);
+          clearPageTransforms(targetEl);
+          const newPageName = PAGE_ORDER[targetIdx];
+          await switchToPage(newPageName);
+          isAnimating = false;
+          resetSwipe();
+        }, 260);
+      } else {
+        activeEl.classList.add('slide-transition');
+        activeEl.style.transform = `translate3d(0, 0, 0) scale(1)`;
+        activeEl.style.opacity = '1';
+
+        if (targetEl) {
+          targetEl.classList.add('slide-transition');
+          const finalTargetX = dx < 0 ? frameWidth : -frameWidth;
+          targetEl.style.transform = `translate3d(${finalTargetX}px, 0, 0) scale(0.98)`;
+          targetEl.style.opacity = '0.96';
+        }
+
+        setTimeout(() => {
+          clearPageTransforms(activeEl);
+          if (targetEl) {
+            targetEl.classList.add('hidden');
+            clearPageTransforms(targetEl);
+          }
+          isAnimating = false;
+          resetSwipe();
+        }, 260);
+      }
+    };
+
+    deviceFrame.addEventListener('touchend', handleTouchEnd, { passive: true });
+    deviceFrame.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    // === 保留左右側點擊切換分頁作為 Fallback ===
     deviceFrame.addEventListener('click', async (e) => {
-      // 1. 檢查是否有打開彈窗或抽屜，若有則不跳頁
+      if (isSwiping || isAnimating) return;
+
       const gardenModal = document.getElementById('garden-detail-modal');
       const memoDrawer = document.getElementById('memo-drawer');
       const isModalOpen = gardenModal && !gardenModal.classList.contains('hidden');
       const isDrawerOpen = memoDrawer && !memoDrawer.classList.contains('hidden');
       if (isModalOpen || isDrawerOpen) return;
 
-      // 2. 檢查點擊的目標是否為可互動元素，若是則忽略跳頁
       const isInteractive = e.target.closest('button, textarea, input, a, .manuscript-cell, .garden-dot, .diary-review-card, .btn-circle-plus, .timeline-item, .timeline-image-wrapper, .mood-dot, .btn-close-modal, .story-bar, svg, path, i');
       if (isInteractive) return;
 
-      // 3. 計算點擊相對於手機外框的水平比例
       const rect = deviceFrame.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const frameWidth = rect.width;
       const ratio = clickX / frameWidth;
 
-      // 獲取當前分頁名稱
-      let currentPage = 'today';
-      if (barGarden && barGarden.classList.contains('active')) currentPage = 'garden';
-      if (barWeekly && barWeekly.classList.contains('active')) currentPage = 'weekly';
-      if (barToday && barToday.classList.contains('active')) currentPage = 'today';
-      if (barPartner && barPartner.classList.contains('active')) currentPage = 'partner';
+      const currentPage = getCurrentActivePage();
 
-      // 4. 左側點擊 (前進到左邊: Partner -> Today -> Weekly -> Garden)
+      // 左側點擊 (前往左邊頁面: Partner -> Today -> Weekly -> Garden)
       if (ratio < 0.22) {
         if (currentPage === 'partner') {
-          await switchToPage('today');
+          await switchToPage('today', null, true);
         } else if (currentPage === 'today') {
-          await switchToPage('weekly');
+          await switchToPage('weekly', null, true);
         } else if (currentPage === 'weekly') {
-          await switchToPage('garden');
+          await switchToPage('garden', null, true);
         }
       }
-      // 5. 右側點擊 (前進到右邊: Garden -> Weekly -> Today -> Partner)
+      // 右側點擊 (前往右邊頁面: Garden -> Weekly -> Today -> Partner)
       else if (ratio > 0.78) {
         if (currentPage === 'garden') {
-          await switchToPage('weekly');
+          await switchToPage('weekly', null, true);
         } else if (currentPage === 'weekly') {
-          await switchToPage('today');
+          await switchToPage('today', null, true);
         } else if (currentPage === 'today') {
-          await switchToPage('partner');
+          await switchToPage('partner', null, true);
         }
       }
     });

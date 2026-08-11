@@ -159,7 +159,9 @@ body {
 }
 
 .app-container {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;
@@ -169,6 +171,11 @@ body {
   background-color: var(--color-bg);
   background-blend-mode: multiply;
   background-size: cover;
+  will-change: transform, opacity;
+}
+
+.app-container.slide-transition {
+  transition: transform 0.26s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
 
 #splash-page {
@@ -1572,19 +1579,19 @@ body {
    Apple-Level UX Polish - Focus, Active, Transitions & Toasts
    ========================================================================== */
 
-/* 1. Page Switch Transition */
-.app-container:not(.hidden) {
+/* 1. Page Switch Transition for login/splash/onboarding */
+#splash-page:not(.hidden),
+#login-page:not(.hidden),
+#onboarding-page:not(.hidden) {
   animation: pageFadeIn 0.28s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 
 @keyframes pageFadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
