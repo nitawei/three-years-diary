@@ -492,11 +492,11 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background-color: rgba(67, 67, 67, 0.12);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   opacity: 1;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.32s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: opacity; /* GPU acceleration */
 }
 
@@ -516,12 +516,12 @@ body {
   width: 100%;
   height: 86%; /* iOS style bottom-sheet height */
   max-height: 86vh; /* Mobile viewport safety */
-  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   z-index: 10;
   transform: translateY(0);
-  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: transform 0.32s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: transform; /* GPU acceleration */
 }
 
@@ -530,17 +530,17 @@ body {
 }
 
 .memo-drawer-handle {
-  width: 38px;
-  height: 5px;
-  background-color: var(--color-border-visible);
+  width: 32px;
+  height: 3px;
+  background-color: rgba(67, 67, 67, 0.15);
   border-radius: var(--radius-pill);
-  margin: 14px auto 10px auto;
+  margin: 12px auto 8px auto;
   cursor: pointer;
   flex-shrink: 0;
-  transition: var(--transition-normal);
+  transition: background-color 0.2s ease;
 }
 .memo-drawer-handle:hover {
-  background-color: var(--color-text-sub);
+  background-color: rgba(67, 67, 67, 0.3);
 }
 
 .memo-drawer-scroll {
@@ -730,10 +730,39 @@ body {
   border-radius: var(--radius-md);
 }
 
+/* Pure Typography Memo Indicator (· 3) */
+.memo-indicator {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+  opacity: 0.85;
+  cursor: pointer;
+  background: none !important;
+  border: none !important;
+  padding: 2px 6px;
+  margin: 0;
+  letter-spacing: 0.04em;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  text-decoration: none;
+  outline: none;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.memo-indicator:active {
+  opacity: 0.55;
+  transform: translateY(1px);
+}
+
 /* Typewriter style for timeline items in drawers and on the Today page */
 #memo-timeline-list,
-#partner-paired-memos-list,
-#review-memo-timeline-list {
+#partner-paired-memos-list {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -743,9 +772,17 @@ body {
   counter-reset: memo-counter;
 }
 
+#review-memo-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0 !important;
+  padding-top: 8px;
+  border-top: none !important;
+  padding-bottom: 40px;
+}
+
 #memo-timeline-list .timeline-item,
-#partner-paired-memos-list .timeline-item,
-#review-memo-timeline-list .timeline-item {
+#partner-paired-memos-list .timeline-item {
   display: grid;
   grid-template-columns: 80px 1fr;
   gap: 16px;
@@ -756,6 +793,20 @@ body {
   margin: 0 !important;
   font-family: 'Courier Prime', 'Courier New', Courier, monospace;
   box-sizing: border-box;
+}
+
+#review-memo-timeline-list .timeline-item {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 12px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0;
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  box-sizing: border-box;
+  align-items: baseline;
 }
 
 /* Remove old counters, pseudo-headers and stamps */
@@ -775,8 +826,7 @@ body {
 }
 
 #memo-timeline-list .item-time,
-#partner-paired-memos-list .item-time,
-#review-memo-timeline-list .item-time {
+#partner-paired-memos-list .item-time {
   font-family: 'Courier Prime', 'Courier New', Courier, monospace;
   font-size: 0.85rem;
   font-weight: bold;
@@ -784,6 +834,17 @@ body {
   display: inline-block;
   width: auto;
   white-space: nowrap;
+}
+
+#review-memo-timeline-list .item-time {
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  display: inline-block;
+  width: auto;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 #memo-timeline-list .item-body,
@@ -795,8 +856,7 @@ body {
 }
 
 #memo-timeline-list .item-text,
-#partner-paired-memos-list .item-text,
-#review-memo-timeline-list .item-text {
+#partner-paired-memos-list .item-text {
   font-family: 'Courier Prime', 'Courier New', Courier, monospace;
   font-size: 0.85rem;
   color: #2b2b2b;
@@ -805,6 +865,19 @@ body {
   padding: 0 !important;
   border-radius: 0;
   word-break: break-all;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+#review-memo-timeline-list .item-text {
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  font-size: 0.88rem;
+  color: var(--color-text-main);
+  line-height: 1.6;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0;
+  word-break: break-word;
   white-space: pre-wrap;
   margin: 0;
 }

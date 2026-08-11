@@ -1451,11 +1451,19 @@ function setupEventListeners() {
 
   // === 歷史回顧備忘錄抽屜顯示/隱藏控制 ===
   const btnCloseReviewMemo = document.getElementById('btn-close-review-memo');
+  const btnCloseReviewMemoX = document.getElementById('btn-close-review-memo-x');
   const reviewMemoDrawerOverlay = document.getElementById('review-memo-drawer-overlay');
   const reviewMemoDrawer = document.getElementById('review-memo-drawer');
 
   if (btnCloseReviewMemo && reviewMemoDrawer) {
     btnCloseReviewMemo.addEventListener('click', () => {
+      reviewMemoDrawer.classList.add('hidden');
+      reviewMemoDrawer.querySelector('.memo-drawer-content').style.height = '';
+    });
+  }
+
+  if (btnCloseReviewMemoX && reviewMemoDrawer) {
+    btnCloseReviewMemoX.addEventListener('click', () => {
       reviewMemoDrawer.classList.add('hidden');
       reviewMemoDrawer.querySelector('.memo-drawer-content').style.height = '';
     });
@@ -3167,6 +3175,13 @@ function isDateInCurrentWeek(dateStr) {
   return diffDays >= 0 && diffDays < 7;
 }
 
+// Memo Indicator 格式化工具 (0 -> '', 1..99 -> '· N', 100+ -> '· 99+')
+function formatMemoIndicator(count) {
+  if (!count || count <= 0) return '';
+  if (count > 99) return '· 99+';
+  return `· ${count}`;
+}
+
 // 5. 點擊小點，開啟詳細對照彈窗並渲染資料
 async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
   const modal = document.getElementById('garden-detail-modal');
@@ -3292,25 +3307,35 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
       notebookText.style.setProperty('--mood-color-line', colors.line);
     } else {
       notebookText.textContent = '今天沒有寫下任何日記字句。';
-      notebookMeta.textContent = `${formattedDate} · 今天還沒有寫下任何話。`;
+      notebookMeta.textContent = formattedDate;
       
       notebookText.style.setProperty('--mood-color', '#c7c7cc');
       notebookText.style.setProperty('--mood-color-line', 'rgba(199, 199, 204, 0.4)');
     }
     
-    // 綁定點擊讀取使用者自己隨筆的按鈕
+    // 載入使用者隨筆並渲染 Memo Indicator (若 memoCount === 0 則不顯示)
     const userMemoBtn = document.getElementById('btn-user-modal-memo');
+    const userMemos = await DiaryDB.getMemosForDate(dateStr, State.currentUser);
+    const userMemoCount = userMemos ? userMemos.length : 0;
+    
     if (userMemoBtn) {
-      userMemoBtn.onclick = async () => {
-        const reviewMemoDrawer = document.getElementById('review-memo-drawer');
-        const reviewMemoTitle = document.getElementById('review-memo-title');
-        if (reviewMemoDrawer && reviewMemoTitle) {
-          reviewMemoTitle.textContent = '時光隨筆';
-          const userMemos = await DiaryDB.getMemosForDate(dateStr, State.currentUser);
-          renderReviewMemoTimeline(userMemos);
-          reviewMemoDrawer.classList.remove('hidden');
-        }
-      };
+      if (userMemoCount > 0) {
+        userMemoBtn.style.display = 'inline-flex';
+        userMemoBtn.className = 'memo-indicator';
+        userMemoBtn.textContent = formatMemoIndicator(userMemoCount);
+        userMemoBtn.onclick = async () => {
+          const reviewMemoDrawer = document.getElementById('review-memo-drawer');
+          const reviewMemoTitle = document.getElementById('review-memo-title');
+          if (reviewMemoDrawer && reviewMemoTitle) {
+            reviewMemoTitle.textContent = '隨筆';
+            renderReviewMemoTimeline(userMemos);
+            reviewMemoDrawer.classList.remove('hidden');
+          }
+        };
+      } else {
+        userMemoBtn.style.display = 'none';
+        userMemoBtn.onclick = null;
+      }
     }
     
     // 載入並渲染伴侶日記 (若已配對、授權開始日成立且夥伴當天有寫日記)
@@ -3334,16 +3359,26 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
             partnerText.textContent = partnerDiary.content;
             partnerMeta.textContent = formattedDate;
             
-            partnerMemoBtn.onclick = async () => {
-              const reviewMemoDrawer = document.getElementById('review-memo-drawer');
-              const reviewMemoTitle = document.getElementById('review-memo-title');
-              if (reviewMemoDrawer && reviewMemoTitle) {
-                reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
-                const partnerMemos = await window.getPartnerMemosByDate(partnerId, dateStr, sharingStartDate);
-                renderReviewMemoTimeline(partnerMemos);
-                reviewMemoDrawer.classList.remove('hidden');
-              }
-            };
+            const partnerMemos = await window.getPartnerMemosByDate(partnerId, dateStr, sharingStartDate);
+            const partnerMemoCount = partnerMemos ? partnerMemos.length : 0;
+            
+            if (partnerMemoCount > 0) {
+              partnerMemoBtn.style.display = 'inline-flex';
+              partnerMemoBtn.className = 'memo-indicator';
+              partnerMemoBtn.textContent = formatMemoIndicator(partnerMemoCount);
+              partnerMemoBtn.onclick = async () => {
+                const reviewMemoDrawer = document.getElementById('review-memo-drawer');
+                const reviewMemoTitle = document.getElementById('review-memo-title');
+                if (reviewMemoDrawer && reviewMemoTitle) {
+                  reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
+                  renderReviewMemoTimeline(partnerMemos);
+                  reviewMemoDrawer.classList.remove('hidden');
+                }
+              };
+            } else {
+              partnerMemoBtn.style.display = 'none';
+              partnerMemoBtn.onclick = null;
+            }
             
             const colors = MOOD_COLORS[partnerDiary.mood] || { text: '#434343', line: 'rgba(67, 67, 67, 0.4)' };
             partnerText.style.setProperty('--mood-color', colors.text);
@@ -3373,7 +3408,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
   }
 }
 
-// 7. 渲染彈窗內部的 memos 隨筆時間軸
+// 7. 渲染彈窗內部的 memos 隨筆時間軸 (打字機手記感，無 divider，細微確定性間距)
 function renderReviewMemoTimeline(memos) {
   const timelineList = document.getElementById('review-memo-timeline-list');
   if (!timelineList) return;
@@ -3383,32 +3418,45 @@ function renderReviewMemoTimeline(memos) {
   if (!memos || !memos.length) {
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'empty-state';
+    emptyMsg.style.cssText = 'color: var(--color-text-sub); font-size: 0.85rem; padding: 20px 0; text-align: center;';
     emptyMsg.textContent = '此日期無登錄隨筆記錄。';
     timelineList.appendChild(emptyMsg);
     return;
   }
   
+  const deterministicSpacings = [10, 14, 11, 15, 12];
   const fragment = document.createDocumentFragment();
-  memos.forEach(memo => {
+  
+  memos.forEach((memo, index) => {
     const item = document.createElement('div');
     item.className = 'timeline-item';
     
+    // 微小且確定性的垂直空白變化 (Deterministic typewriter rhythm)
+    const isLast = index === memos.length - 1;
+    if (!isLast) {
+      const bottomGap = deterministicSpacings[index % deterministicSpacings.length];
+      item.style.marginBottom = `${bottomGap}px`;
+    } else {
+      item.style.marginBottom = '0px';
+    }
+    
     const timeSpan = document.createElement('span');
     timeSpan.className = 'item-time';
-    timeSpan.textContent = memo.time + ':';
+    timeSpan.textContent = memo.time ? (memo.time.includes(':') ? memo.time : memo.time + ':') : '';
     
     const body = document.createElement('div');
     body.className = 'item-body';
     
     const textNode = document.createElement('div');
     textNode.className = 'item-text';
-    textNode.textContent = memo.content;
+    textNode.textContent = memo.content || '';
     body.appendChild(textNode);
     
-    // 渲染圖片
+    // 渲染圖片 (若有)
     if (memo.images && memo.images.length) {
       const imgGrid = document.createElement('div');
       imgGrid.className = 'timeline-images-grid';
+      imgGrid.style.marginTop = '6px';
       
       memo.images.forEach(base64 => {
         const wrapper = document.createElement('div');
@@ -3417,19 +3465,19 @@ function renderReviewMemoTimeline(memos) {
         const img = document.createElement('img');
         const safeSrc = isSafeImageUri(base64) ? base64 : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         img.src = safeSrc;
-        img.loading = 'lazy'; // Lazy-load images
+        img.loading = 'lazy';
         img.alt = '隨筆相片';
         
         img.addEventListener('click', () => {
           const w = window.open();
           if (w) {
-            const body = w.document.body;
-            body.style.margin = '0';
-            body.style.backgroundColor = '#000';
-            body.style.display = 'flex';
-            body.style.alignItems = 'center';
-            body.style.justifyContent = 'center';
-            body.style.height = '100vh';
+            const b = w.document.body;
+            b.style.margin = '0';
+            b.style.backgroundColor = '#000';
+            b.style.display = 'flex';
+            b.style.alignItems = 'center';
+            b.style.justifyContent = 'center';
+            b.style.height = '100vh';
             
             const largeImg = w.document.createElement('img');
             largeImg.src = safeSrc;
@@ -3437,7 +3485,7 @@ function renderReviewMemoTimeline(memos) {
             largeImg.style.maxHeight = '100vh';
             largeImg.style.display = 'block';
             largeImg.style.margin = 'auto';
-            body.appendChild(largeImg);
+            b.appendChild(largeImg);
           }
         });
         
@@ -3452,6 +3500,7 @@ function renderReviewMemoTimeline(memos) {
     item.appendChild(body);
     fragment.appendChild(item);
   });
+  
   timelineList.appendChild(fragment);
 }
 
@@ -3794,51 +3843,36 @@ async function renderPreviousYearsReview() {
           card.appendChild(linesContainer);
         }
         
-        // 右下角新增 ＋ 按鈕，點擊顯示隨筆 (不論是否有隨筆皆顯示)
+        // 卡片底部 (左側日期，右側 Memo Indicator，無 Memo 則完全不顯示指示器)
         const footer = document.createElement('div');
-        footer.style.cssText = 'display: flex; justify-content: flex-end; align-items: center; margin-top: 14px;';
+        footer.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding: 0 2px;';
         
-        const plusBtn = document.createElement('button');
-        plusBtn.textContent = '+';
-        plusBtn.title = '閱讀隨筆';
-        plusBtn.style.cssText = `
-          background: none;
-          border: 1px solid var(--color-border);
-          border-radius: 50%;
-          width: 22px;
-          height: 22px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 0.86rem;
-          font-weight: 600;
-          color: var(--color-text-sub);
-          cursor: pointer;
-          padding: 0;
-          line-height: 1;
-          transition: var(--transition-normal);
-        `;
+        const dateMeta = document.createElement('p');
+        dateMeta.className = 'notebook-date-meta';
+        dateMeta.style.margin = '0';
+        dateMeta.textContent = `${year} 年 ${mmStr} 月 ${ddStr} 日`;
+        footer.appendChild(dateMeta);
         
-        plusBtn.addEventListener('mouseenter', () => {
-          plusBtn.style.backgroundColor = 'var(--color-border-visible)';
-        });
-        plusBtn.addEventListener('mouseleave', () => {
-          plusBtn.style.backgroundColor = 'transparent';
-        });
+        const memoCount = memos ? memos.length : 0;
+        if (memoCount > 0) {
+          const memoBtn = document.createElement('button');
+          memoBtn.className = 'memo-indicator';
+          memoBtn.textContent = formatMemoIndicator(memoCount);
+          memoBtn.title = '閱讀隨筆';
+          
+          memoBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const reviewMemoDrawer = document.getElementById('review-memo-drawer');
+            const reviewMemoTitle = document.getElementById('review-memo-title');
+            if (reviewMemoDrawer && reviewMemoTitle) {
+              reviewMemoTitle.textContent = '隨筆';
+              renderReviewMemoTimeline(memos);
+              reviewMemoDrawer.classList.remove('hidden');
+            }
+          });
+          footer.appendChild(memoBtn);
+        }
         
-        plusBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const reviewMemoDrawer = document.getElementById('review-memo-drawer');
-          const reviewMemoTitle = document.getElementById('review-memo-title');
-          if (reviewMemoDrawer && reviewMemoTitle) {
-            reviewMemoTitle.textContent = `${year}.${mmStr}.${ddStr} 的隨筆`;
-            const userMemos = await DiaryDB.getMemosForDate(targetDateStr, State.currentUser);
-            renderReviewMemoTimeline(userMemos);
-            reviewMemoDrawer.classList.remove('hidden');
-          }
-        });
-        
-        footer.appendChild(plusBtn);
         card.appendChild(footer);
         
         fragment.appendChild(card);
