@@ -1299,13 +1299,15 @@ function setupEventListeners() {
       removeManuscriptCursor();
       const text = textarea.value ? textarea.value.trim() : '';
       if (text.length > 0) {
-        await DiaryDB.saveDiary({
+        const savedDiary = {
           date: State.activeDate,
           content: textarea.value,
           mood: State.selectedMood,
           timestamp: new Date().toISOString()
-        }, State.currentUser);
+        };
+        await DiaryDB.saveDiary(savedDiary, State.currentUser);
         updateGardenDot(State.activeDate, State.selectedMood);
+        updateWeeklyCard(State.activeDate, savedDiary);
         SyncManager.addToQueue('save_diary', { date: State.activeDate, content: textarea.value, mood: State.selectedMood });
       } else {
         // SAFE EMPTY STATE: Blur on empty textarea MUST NEVER issue a cloud delete_diary task
@@ -1350,12 +1352,13 @@ function setupEventListeners() {
       }
       
       try {
-        await DiaryDB.saveDiary({
+        const savedDiary = {
           date: State.activeDate,
           content: textarea.value,
           mood: State.selectedMood,
           timestamp: new Date().toISOString()
-        }, State.currentUser);
+        };
+        await DiaryDB.saveDiary(savedDiary, State.currentUser);
         // 儲存今天日記後，以單點更新熱力圖中對應點的顏色與觸發圓滿動畫
         const dot = (typeof gardenDotMap !== 'undefined' && gardenDotMap.get(State.activeDate)) || document.querySelector(`.garden-dot[data-date="${State.activeDate}"]`);
         if (dot) {
@@ -1372,6 +1375,7 @@ function setupEventListeners() {
           }
         }
         updateGardenDot(State.activeDate, State.selectedMood);
+        updateWeeklyCard(State.activeDate, savedDiary);
         await checkThreeYearCompletion();
         await checkBackupReminder();
         
@@ -1495,9 +1499,12 @@ function setupEventListeners() {
       State.currentUser = e.target.value;
       await fetchCurrentUserObj();
       
-      // 重新載入新角色的今日頁面與 Yearly 熱力圖
+      // 重新載入新角色的今日頁面與 Yearly/Weekly
+      isGardenInitialized = false;
+      isWeeklyInitialized = false;
       await loadTodayData();
-      await initGarden();
+      await initGarden(true);
+      await initWeeklyReview(true);
       
       // 切換至 Today 主頁面
       await switchToPage('today');
@@ -1656,8 +1663,11 @@ function setupEventListeners() {
     devActiveYearSelect.addEventListener('change', async (e) => {
       settingsModal.classList.add('hidden');
       State.activeDate = e.target.value;
+      isGardenInitialized = false;
+      isWeeklyInitialized = false;
       await loadTodayData();
-      await initGarden();
+      await initGarden(true);
+      await initWeeklyReview(true);
       alert(`🎉 成功！已模擬當前日期為：${State.activeDate} (${new Date(State.activeDate).getFullYear()}年)`);
     });
   }
@@ -3255,9 +3265,9 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
           // 關閉 Modal
           modal.classList.add('hidden');
           
-          // 單點更新時光花園
+          // 單點更新時光花園與週記
           updateGardenDot(dateStr, null);
-          await renderWeeklyReview();
+          updateWeeklyCard(dateStr, null);
           
           // 如果被刪除的是今天，立刻清空今日書寫卡片狀態
           if (dateStr === State.activeDate) {
@@ -3669,7 +3679,29 @@ window.renderPartnerYesterdaySection = renderPartnerYesterdaySection;
 
 // 1. 初始化週記介面按鈕與載入邏輯
 let isWeeklyInitialized = false;
-async function initWeeklyReview() {
+const weeklyCardMap = new Map();
+
+async function updateWeeklyCard(dateStr, diary) {
+  if (!dateStr) return;
+  const card = weeklyCardMap.get(dateStr) || document.querySelector(`#weekly-review-list .diary-review-card[data-date="${dateStr}"]`);
+  if (!card) return; // 不在目前查看的週次中，無需更新 DOM
+  
+  if (diary === undefined) {
+    diary = await DiaryDB.getDiary(dateStr, State.currentUser);
+  }
+  
+  const newCard = createDiaryReviewCard(dateStr, diary);
+  card.replaceWith(newCard);
+  weeklyCardMap.set(dateStr, newCard);
+  try {
+    lucide.createIcons();
+  } catch (e) {}
+}
+window.updateWeeklyCard = updateWeeklyCard;
+
+async function initWeeklyReview(force = false) {
+  if (!State.currentUser) return;
+  
   if (!isWeeklyInitialized) {
     const btnPrev = document.getElementById('btn-prev-week');
     const btnNext = document.getElementById('btn-next-week');
@@ -3677,13 +3709,13 @@ async function initWeeklyReview() {
     if (btnPrev && btnNext) {
       btnPrev.addEventListener('click', async () => {
         State.weeklyOffset--;
-        await window.renderWeeklyReview();
+        await renderWeeklyReview();
       });
       
       btnNext.addEventListener('click', async () => {
         if (State.weeklyOffset < 0) {
           State.weeklyOffset++;
-          await window.renderWeeklyReview();
+          await renderWeeklyReview();
         }
       });
     }
@@ -3694,15 +3726,21 @@ async function initWeeklyReview() {
       weeklyTitle.addEventListener('click', async () => {
         if (State.weeklyOffset !== 0) {
           State.weeklyOffset = 0;
-          await window.renderWeeklyReview();
+          await renderWeeklyReview();
         }
       });
     }
-    isWeeklyInitialized = true;
+  }
+
+  // 若已初始化且未強制重建，直接保留既有 DOM，避免 swipe 閃爍
+  if (isWeeklyInitialized && !force) {
+    return;
   }
   
-  await window.renderWeeklyReview();
+  await renderWeeklyReview();
+  isWeeklyInitialized = true;
 }
+window.initWeeklyReview = initWeeklyReview;
 
 // 2. WeeklyReview 元件：計算日期區間、查詢資料庫並渲染列表
 async function renderWeeklyReview() {
@@ -3712,6 +3750,7 @@ async function renderWeeklyReview() {
   
   if (!reviewList) return;
   reviewList.innerHTML = '';
+  weeklyCardMap.clear();
   
   // 計算本週 7 天的日期序列（降冪排列）
   const dates = [];
@@ -3746,6 +3785,7 @@ async function renderWeeklyReview() {
   for (const dateStr of dates) {
     const diary = await DiaryDB.getDiary(dateStr, State.currentUser);
     const cardNode = createDiaryReviewCard(dateStr, diary);
+    weeklyCardMap.set(dateStr, cardNode);
     reviewList.appendChild(cardNode);
   }
   
@@ -3759,6 +3799,7 @@ async function renderWeeklyReview() {
 function createDiaryReviewCard(dateStr, diary) {
   const card = document.createElement('div');
   card.className = 'diary-review-card';
+  card.setAttribute('data-date', dateStr);
   
   // 格式化日期與星期
   const parts = dateStr.split('-');
@@ -3827,8 +3868,8 @@ function createDiaryReviewCard(dateStr, diary) {
           const mainContainer = document.getElementById('manuscript-container-box');
           if (mainContainer) mainContainer.className = 'manuscript-container mood-black';
         }
-        await updateGardenDotsColor();
-        await window.renderWeeklyReview();
+        updateGardenDot(dateStr, null);
+        updateWeeklyCard(dateStr, null);
         await checkThreeYearCompletion();
         window.showToast('日記已刪除');
       } catch (err) {
@@ -3955,6 +3996,7 @@ async function renderPreviousYearsReview() {
               await DiaryDB.deleteDiary(targetDateStr, State.currentUser);
               await renderPreviousYearsReview();
               updateGardenDot(targetDateStr, null);
+              updateWeeklyCard(targetDateStr, null);
               
               // 清理草稿與寫入同步佇列
               localStorage.removeItem(`draft_diary_${State.currentUser}_${targetDateStr}`);
@@ -4791,7 +4833,7 @@ async function openEditDiaryDrawer(dateStr) {
           
           // 單點更新時光花園與週記
           updateGardenDot(editTargetDate, editSelectedMood);
-          await window.renderWeeklyReview();
+          updateWeeklyCard(editTargetDate);
           await checkThreeYearCompletion();
           
           window.showToast('日記已儲存');
@@ -4818,6 +4860,9 @@ window.validateDisplayName = validateDisplayName;
 window.openEditDiaryDrawer = openEditDiaryDrawer;
 window.SyncManager = SyncManager;
 window.renderWeeklyReview = renderWeeklyReview;
+window.initWeeklyReview = initWeeklyReview;
+window.updateWeeklyCard = updateWeeklyCard;
+window.weeklyCardMap = weeklyCardMap;
 window.getPartnerName = getPartnerName;
 window.loadTodayData = loadTodayData;
 window.isDateEditable = isDateInCurrentWeek;
