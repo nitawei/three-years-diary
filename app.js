@@ -569,9 +569,9 @@ function updatePartnerDisplayNamesInUI(rawPartnerName) {
   const isPaired = !!partnerId;
   const name = (rawPartnerName && typeof rawPartnerName === 'string' && rawPartnerName.trim()) ? rawPartnerName.trim() : '筆友';
 
-  const partnerHeaderTitle = document.querySelector('#partner-page .section-title');
+  const partnerHeaderTitle = document.querySelector('#partner-page .partner-diary-card .section-title') || document.querySelector('#partner-page .section-title');
   if (partnerHeaderTitle) {
-    partnerHeaderTitle.textContent = isPaired ? `${name} 的這一天` : '交換日記';
+    partnerHeaderTitle.textContent = isPaired ? '今天' : '交換日記';
   }
 
   const partnerDiarySub = document.getElementById('partner-paired-meta');
@@ -941,8 +941,14 @@ async function loadTodayData() {
         const partnerMemosContainer = document.getElementById('partner-paired-memos-container');
         if (partnerMemosContainer) partnerMemosContainer.style.display = 'none';
 
+        const partnerYesterdayContainer = document.getElementById('partner-yesterday-container');
+        if (partnerYesterdayContainer) {
+          partnerYesterdayContainer.innerHTML = '';
+          partnerYesterdayContainer.classList.add('hidden');
+        }
+
         // 清除與重置 Partner 頁面的 UI Title
-        const partnerHeaderTitle = document.querySelector('#partner-page .section-title');
+        const partnerHeaderTitle = document.querySelector('#partner-page .partner-diary-card .section-title') || document.querySelector('#partner-page .section-title');
         if (partnerHeaderTitle) partnerHeaderTitle.textContent = '交換日記';
 
         const partnerMeta = document.getElementById('partner-paired-meta');
@@ -1064,6 +1070,9 @@ async function loadTodayData() {
             partnerMemosContainer.style.display = 'none';
           }
         }
+
+        // 載入筆友昨日日記 (One-time fetch, 比照 Weekly/Yearly 過去日記卡片)
+        await renderPartnerYesterdaySection();
       }
     }
 
@@ -3503,6 +3512,149 @@ function renderReviewMemoTimeline(memos) {
   
   timelineList.appendChild(fragment);
 }
+
+// ==================== 筆友昨日日記區塊 (Yesterday Partner Diary) ====================
+
+// 根據專案既有日曆策略安全計算「昨天」字串 (YYYY-MM-DD)
+function getYesterdayDateStr(todayStr = TODAY_DATE_STR) {
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  const d = new Date(ty, tm - 1, td);
+  d.setDate(d.getDate() - 1);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+async function renderPartnerYesterdaySection() {
+  const yesterdayContainer = document.getElementById('partner-yesterday-container');
+  if (!yesterdayContainer) return;
+
+  const partnerId = window.PartnerService ? window.PartnerService.getPartnerId(State.currentUser) : null;
+  const sharingStartDate = window.PartnerService ? window.PartnerService.getSharingStartDate(State.currentUser) : null;
+
+  if (!partnerId || !sharingStartDate) {
+    yesterdayContainer.innerHTML = '';
+    yesterdayContainer.classList.add('hidden');
+    return;
+  }
+
+  const yesterdayDateStr = getYesterdayDateStr(TODAY_DATE_STR);
+
+  // 隱私權限防線：若昨天早於配對起始日，絕對不查詢、不顯示 (Case 6 & Case 8)
+  if (yesterdayDateStr < sharingStartDate) {
+    yesterdayContainer.innerHTML = '';
+    yesterdayContainer.classList.add('hidden');
+    return;
+  }
+
+  try {
+    // 單次查詢昨天的筆友日記與隨筆 (不建立額外 Realtime Listener)
+    let partnerDiary = null;
+    if (window.getPartnerDiaryByDate) {
+      partnerDiary = await window.getPartnerDiaryByDate(partnerId, yesterdayDateStr, sharingStartDate);
+    } else {
+      partnerDiary = await DiaryDB.getDiary(yesterdayDateStr, partnerId);
+    }
+
+    let partnerMemos = [];
+    if (window.getPartnerMemosByDate) {
+      partnerMemos = await window.getPartnerMemosByDate(partnerId, yesterdayDateStr, sharingStartDate);
+    } else {
+      partnerMemos = await DiaryDB.getMemosForDate(yesterdayDateStr, partnerId);
+    }
+
+    const hasDiary = partnerDiary && typeof partnerDiary.content === 'string' && partnerDiary.content.trim().length > 0;
+    const memoCount = (partnerMemos && partnerMemos.length) ? partnerMemos.length : 0;
+
+    // 若筆友昨天沒有日記且沒有隨筆，不顯示空白卡片，保持版面純淨 (Case 2)
+    if (!hasDiary && memoCount === 0) {
+      yesterdayContainer.innerHTML = '';
+      yesterdayContainer.classList.add('hidden');
+      return;
+    }
+
+    const partnerName = await window.getPartnerName();
+    const [y, m, d] = yesterdayDateStr.split('-');
+    const formattedDate = `${y} 年 ${m} 月 ${d} 日`;
+
+    yesterdayContainer.innerHTML = '';
+    yesterdayContainer.classList.remove('hidden');
+
+    // 比照 Weekly / Yearly 過去日記卡片 (橫線筆記本紙感)
+    const card = document.createElement('section');
+    card.className = 'card notebook-card partner-yesterday-card';
+    card.style.marginTop = 'var(--space-xl)';
+    card.style.boxShadow = 'none';
+    card.style.border = '1px solid var(--color-border)';
+
+    // 卡片標頭
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    header.style.paddingBottom = '8px';
+
+    const title = document.createElement('span');
+    title.className = 'section-title';
+    title.style.color = 'var(--color-text-sub)';
+    title.textContent = '昨天';
+    header.appendChild(title);
+    card.appendChild(header);
+
+    // 橫線日記內容 (若有寫日記)
+    if (hasDiary) {
+      const linesContainer = document.createElement('div');
+      linesContainer.className = 'notebook-lines-container';
+
+      const textEl = document.createElement('p');
+      textEl.className = 'lined-notebook-diary';
+      textEl.textContent = partnerDiary.content;
+
+      const colors = MOOD_COLORS[partnerDiary.mood] || { text: '#434343', line: 'rgba(67, 67, 67, 0.4)' };
+      textEl.style.setProperty('--mood-color', colors.text);
+      textEl.style.setProperty('--mood-color-line', colors.line);
+
+      linesContainer.appendChild(textEl);
+      card.appendChild(linesContainer);
+    }
+
+    // 卡片底部 (左側日期，右側 Memo Indicator；若 memoCount === 0 則完全不顯示指示器)
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-xs); padding: 0 2px;';
+
+    const dateMeta = document.createElement('p');
+    dateMeta.className = 'notebook-date-meta';
+    dateMeta.style.cssText = 'font-size: var(--font-size-xs); color: var(--color-text-sub); opacity: 0.8; margin: 0;';
+    dateMeta.textContent = formattedDate;
+    footer.appendChild(dateMeta);
+
+    if (memoCount > 0) {
+      const memoBtn = document.createElement('button');
+      memoBtn.className = 'memo-indicator';
+      memoBtn.textContent = formatMemoIndicator(memoCount);
+      memoBtn.title = '閱讀隨筆';
+
+      memoBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const reviewMemoDrawer = document.getElementById('review-memo-drawer');
+        const reviewMemoTitle = document.getElementById('review-memo-title');
+        if (reviewMemoDrawer && reviewMemoTitle) {
+          reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
+          renderReviewMemoTimeline(partnerMemos);
+          reviewMemoDrawer.classList.remove('hidden');
+        }
+      });
+      footer.appendChild(memoBtn);
+    }
+
+    card.appendChild(footer);
+    yesterdayContainer.appendChild(card);
+  } catch (err) {
+    console.warn('[Partner Yesterday] 載入筆友昨日日記失敗:', err);
+    yesterdayContainer.innerHTML = '';
+    yesterdayContainer.classList.add('hidden');
+  }
+}
+window.renderPartnerYesterdaySection = renderPartnerYesterdaySection;
 
 // ==================== Weekly Review Page Implementation ====================
 
