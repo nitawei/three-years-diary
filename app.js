@@ -1821,6 +1821,7 @@ function setupEventListeners() {
     el.style.transform = '';
     el.style.opacity = '';
     el.style.zIndex = '';
+    el.style.boxShadow = '';
   };
 
   // === 統一分頁切換控制器 (switchToPage) ===
@@ -2056,6 +2057,7 @@ function setupEventListeners() {
         activeEl.style.transform = `translate3d(${resistanceDx}px, 0, 0)`;
         activeEl.style.opacity = '1';
         activeEl.style.zIndex = '2';
+        activeEl.style.boxShadow = '';
         if (targetEl) {
           targetEl.classList.add('hidden');
           clearPageTransforms(targetEl);
@@ -2080,23 +2082,25 @@ function setupEventListeners() {
 
       if (!targetEl) return;
 
-      // 阻尼視覺位移 (手勢判定維持原始 dx，僅畫面 transform 套用 25% 紙張阻尼)
+      // 阻尼視覺位移 (手勢判定維持原始 dx，僅頂層紙張 transform 套用 25% 阻尼)
       const dampedDx = dx * (1 - SWIPE_DAMPING);
 
-      // 即時跟手與輕微紙張層疊 (Soft Paper Slide with 25% Paper Resistance)
-      const progress = Math.min(Math.abs(dampedDx) / frameWidth, 1);
-      const outScale = 1 - progress * 0.02;
-      const outOpacity = 1 - progress * 0.04;
-      activeEl.style.transform = `translate3d(${dampedDx}px, 0, 0) scale(${outScale})`;
-      activeEl.style.opacity = `${outOpacity}`;
-      activeEl.style.zIndex = '2';
+      // Sheet Reveal Model (頂層紙張掀開，底層紙張完全固定於原位)
+      const shadowStyle = dx < 0
+        ? '6px 0 24px rgba(0, 0, 0, 0.08), 2px 0 6px rgba(0, 0, 0, 0.04)'
+        : '-6px 0 24px rgba(0, 0, 0, 0.08), -2px 0 6px rgba(0, 0, 0, 0.04)';
 
-      const inOffset = dx < 0 ? (frameWidth + dampedDx) : (-frameWidth + dampedDx);
-      const inScale = 0.98 + progress * 0.02;
-      const inOpacity = 0.96 + progress * 0.04;
-      targetEl.style.transform = `translate3d(${inOffset}px, 0, 0) scale(${inScale})`;
-      targetEl.style.opacity = `${inOpacity}`;
+      // 頂層頁面：被手指拉開，不縮放 (scale: 1)、不透明 (opacity: 1)，帶有紙張邊緣柔和微陰影
+      activeEl.style.transform = `translate3d(${dampedDx}px, 0, 0)`;
+      activeEl.style.opacity = '1';
+      activeEl.style.zIndex = '2';
+      activeEl.style.boxShadow = shadowStyle;
+
+      // 底層頁面：完全固定滿版於原位 (0, 0, 0)，無縫承接頂層移開後的視野
+      targetEl.style.transform = 'translate3d(0, 0, 0)';
+      targetEl.style.opacity = '1';
       targetEl.style.zIndex = '1';
+      targetEl.style.boxShadow = 'none';
     }, { passive: false });
 
     // TouchEnd & TouchCancel
@@ -2122,10 +2126,10 @@ function setupEventListeners() {
         targetEl.classList.add('slide-transition');
 
         const finalActiveX = dx < 0 ? -frameWidth : frameWidth;
-        activeEl.style.transform = `translate3d(${finalActiveX}px, 0, 0) scale(0.98)`;
-        activeEl.style.opacity = '0.96';
+        activeEl.style.transform = `translate3d(${finalActiveX}px, 0, 0)`;
+        activeEl.style.opacity = '1';
 
-        targetEl.style.transform = `translate3d(0, 0, 0) scale(1)`;
+        targetEl.style.transform = `translate3d(0, 0, 0)`;
         targetEl.style.opacity = '1';
 
         setTimeout(async () => {
@@ -2138,15 +2142,13 @@ function setupEventListeners() {
         }, 260);
       } else {
         activeEl.classList.add('slide-transition');
-        activeEl.style.transform = `translate3d(0, 0, 0) scale(1)`;
+        targetEl.classList.add('slide-transition');
+
+        activeEl.style.transform = `translate3d(0, 0, 0)`;
         activeEl.style.opacity = '1';
 
-        if (targetEl) {
-          targetEl.classList.add('slide-transition');
-          const finalTargetX = dx < 0 ? frameWidth : -frameWidth;
-          targetEl.style.transform = `translate3d(${finalTargetX}px, 0, 0) scale(0.98)`;
-          targetEl.style.opacity = '0.96';
-        }
+        targetEl.style.transform = `translate3d(0, 0, 0)`;
+        targetEl.style.opacity = '1';
 
         setTimeout(() => {
           clearPageTransforms(activeEl);
