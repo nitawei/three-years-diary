@@ -1305,6 +1305,7 @@ function setupEventListeners() {
           mood: State.selectedMood,
           timestamp: new Date().toISOString()
         }, State.currentUser);
+        updateGardenDot(State.activeDate, State.selectedMood);
         SyncManager.addToQueue('save_diary', { date: State.activeDate, content: textarea.value, mood: State.selectedMood });
       } else {
         // SAFE EMPTY STATE: Blur on empty textarea MUST NEVER issue a cloud delete_diary task
@@ -1355,8 +1356,8 @@ function setupEventListeners() {
           mood: State.selectedMood,
           timestamp: new Date().toISOString()
         }, State.currentUser);
-        // 儲存今天日記後，立即更新熱力圖中的點點顏色與觸發圓滿動畫
-        const dot = document.querySelector(`.garden-dot[data-date="${State.activeDate}"]`);
+        // 儲存今天日記後，以單點更新熱力圖中對應點的顏色與觸發圓滿動畫
+        const dot = (typeof gardenDotMap !== 'undefined' && gardenDotMap.get(State.activeDate)) || document.querySelector(`.garden-dot[data-date="${State.activeDate}"]`);
         if (dot) {
           const hadNoMood = !dot.classList.contains('mood-black') && 
                             !dot.classList.contains('mood-yellow') && 
@@ -1370,7 +1371,7 @@ function setupEventListeners() {
             }, 250);
           }
         }
-        await updateGardenDotsColor();
+        updateGardenDot(State.activeDate, State.selectedMood);
         await checkThreeYearCompletion();
         await checkBackupReminder();
         
@@ -3008,7 +3009,27 @@ function getGardenYearsOrder() {
   }
 }
 
-async function initGarden() {
+let isGardenInitialized = false;
+const gardenDotMap = new Map();
+
+function updateGardenDot(dateStr, mood) {
+  if (!dateStr) return;
+  const dot = gardenDotMap.get(dateStr) || document.querySelector(`.garden-dot[data-date="${dateStr}"]`);
+  if (!dot) return;
+
+  // 移除所有可能的心情 class
+  dot.classList.remove('mood-black', 'mood-yellow', 'mood-green', 'mood-blue', 'mood-red');
+
+  // 若有提供 mood (非 null/none)，加上對應心情 class
+  if (mood && mood !== 'none') {
+    dot.classList.add(`mood-${mood}`);
+  }
+}
+window.updateGardenDot = updateGardenDot;
+window.gardenDotMap = gardenDotMap;
+window.initGarden = initGarden;
+
+async function initGarden(force = false) {
   if (!State.currentUser) {
     console.log("[Auth State] Skipping initGarden because Auth is initializing (State.currentUser is null)");
     return;
@@ -3022,11 +3043,16 @@ async function initGarden() {
     subtitle.textContent = `${startYear}-${startYear + 2}`;
   }
 
+  // 若已初始化且非強制重建，直接保留現有 DOM，不再重新建立、不再清空 class、不再重新 bloom
+  if (isGardenInitialized && !force) {
+    return;
+  }
+
   const container = document.getElementById('garden-grids-container');
   if (container) {
     // Check if grids are already rendered in the correct order to prevent DOM thrashing
     const existingCards = container.querySelectorAll('.garden-year-card');
-    let needsRebuild = existingCards.length !== years.length;
+    let needsRebuild = existingCards.length !== years.length || !isGardenInitialized || force;
     if (!needsRebuild) {
       for (let i = 0; i < years.length; i++) {
         const titleSpan = existingCards[i].querySelector('.section-title');
@@ -3039,6 +3065,7 @@ async function initGarden() {
 
     if (needsRebuild) {
       container.innerHTML = '';
+      gardenDotMap.clear();
       
       for (const year of years) {
         const section = document.createElement('section');
@@ -3078,6 +3105,7 @@ async function initGarden() {
           dot.addEventListener('click', () => {
             showGardenDetailModal(dateStr);
           });
+          gardenDotMap.set(dateStr, dot);
           dotsFragment.appendChild(dot);
         }
         grid.appendChild(dotsFragment);
@@ -3090,8 +3118,11 @@ async function initGarden() {
   // 更新各點著色與統計數據
   await updateGardenDotsColor();
   
-  // 觸發漸進綻放 bloom 動畫
-  triggerGardenBloomAnimation();
+  // 首次初始化才觸發漸進綻放 bloom 動畫
+  if (!isGardenInitialized) {
+    triggerGardenBloomAnimation();
+    isGardenInitialized = true;
+  }
 }
 
 // 3. 讀取資料庫，將所有天數 of current cycle 的點染上心情顏色，並更新統計
@@ -3115,8 +3146,8 @@ async function updateGardenDotsColor() {
         const dateStr = dot.getAttribute('data-date');
         const mood = diaryMap[dateStr];
         
-        // 清除先前染上的心情 class
-        dot.className = 'garden-dot';
+        // 移除舊心情 class (不粗暴清空 classList，以保留 .bloom)
+        dot.classList.remove('mood-black', 'mood-yellow', 'mood-green', 'mood-blue', 'mood-red');
         
         if (mood) {
           dot.classList.add(`mood-${mood}`);
@@ -3137,7 +3168,7 @@ async function updateGardenDotsColor() {
   }
 }
 
-// 4. 漸進綻放 bloom 動畫（延遲逐格出現）
+// 4. 漸進綻放 bloom 動畫（延遲逐格出現，僅在初次載入執行）
 function triggerGardenBloomAnimation() {
   const dots = document.querySelectorAll('.garden-dot');
   
@@ -3224,8 +3255,8 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
           // 關閉 Modal
           modal.classList.add('hidden');
           
-          // 重新整理頁面
-          await initGarden();
+          // 單點更新時光花園
+          updateGardenDot(dateStr, null);
           await renderWeeklyReview();
           
           // 如果被刪除的是今天，立刻清空今日書寫卡片狀態
@@ -3923,7 +3954,7 @@ async function renderPreviousYearsReview() {
             try {
               await DiaryDB.deleteDiary(targetDateStr, State.currentUser);
               await renderPreviousYearsReview();
-              await initGarden();
+              updateGardenDot(targetDateStr, null);
               
               // 清理草稿與寫入同步佇列
               localStorage.removeItem(`draft_diary_${State.currentUser}_${targetDateStr}`);
@@ -4758,8 +4789,8 @@ async function openEditDiaryDrawer(dateStr) {
           // 關閉抽屜
           drawer.classList.add('hidden');
           
-          // 重新載入對應頁面內容
-          await updateGardenDotsColor();
+          // 單點更新時光花園與週記
+          updateGardenDot(editTargetDate, editSelectedMood);
           await window.renderWeeklyReview();
           await checkThreeYearCompletion();
           
@@ -4780,7 +4811,7 @@ if (!window.PartnerService || window.PartnerService === PartnerService) {
   window.PartnerService = window.FirebasePartnerService || PartnerService;
 }
 window.isDateInCurrentWeek = isDateInCurrentWeek;
-window.generateExportHTML = generateExportHTML;
+window.generateExportHTML = typeof generateExportHTML !== 'undefined' ? generateExportHTML : generateExportHTMLForArchive;
 window.encryptData = encryptData;
 window.decryptData = decryptData;
 window.validateDisplayName = validateDisplayName;
