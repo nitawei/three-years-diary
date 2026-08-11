@@ -1991,8 +1991,8 @@ function setupEventListeners() {
       const openModal = document.querySelector('.garden-modal-overlay:not(.hidden), .memo-drawer:not(.hidden), .backup-passcode-modal:not(.hidden)');
       if (openModal) return;
 
-      // 檢查是否為可互動元素或輸入框
-      const isInteractive = e.target.closest('textarea, input, select, button, a, .manuscript-cell, .garden-dot, .diary-review-card, .btn-circle-plus, .timeline-item, .timeline-image-wrapper, .mood-dot, .btn-close-modal, .story-bar, .modal-sheet, .garden-modal-sheet, .memo-drawer-content');
+      // 檢查是否為需要獨立觸控/輸入的控制元件 (排除文字輸入框、按鈕、連結與彈窗抽屜本體)
+      const isInteractive = e.target.closest('textarea, input, select, button, a, [role="button"], .btn-circle-plus, .btn-close-modal, .story-bar, .modal-sheet, .garden-modal-sheet, .memo-drawer-content, .backup-passcode-modal');
       if (isInteractive) return;
 
       const touch = e.touches[0];
@@ -2021,14 +2021,22 @@ function setupEventListeners() {
       const touch = e.touches[0];
       const dx = touch.clientX - touchStartX;
       const dy = touch.clientY - touchStartY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
 
       // 方向鎖定判斷 (區分垂直滾動與水平滑動)
       if (!isDirectionLocked) {
-        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 7) {
+        // 未達初始位移門檻時持續追蹤，避免微小晃動誤殺
+        if (absX < 8 && absY < 8) return;
+
+        // 明確為垂直滾動 (垂直位移明顯大於水平且大於 12px)
+        if (absY > absX * 1.2 && absY > 12) {
           isSwipeCancelled = true; // 垂直滾動：取消滑動，允許原生滾動
           return;
         }
-        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+
+        // 明確為水平滑動 (水平位移大於垂直且大於 10px)
+        if (absX > absY && absX > 10) {
           isDirectionLocked = true;
           isSwiping = true;
         } else {

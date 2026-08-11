@@ -143,6 +143,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  touch-action: pan-y;
 }
 
 @media (max-width: 480px) {
@@ -172,6 +173,7 @@ body {
   background-blend-mode: multiply;
   background-size: cover;
   will-change: transform, opacity;
+  touch-action: pan-y;
 }
 
 .app-container.slide-transition {
@@ -223,6 +225,7 @@ body {
   scrollbar-width: none;
   display: flex;
   flex-direction: column;
+  touch-action: pan-y;
 }
 .page-content::-webkit-scrollbar {
   display: none;
