@@ -1984,7 +1984,7 @@ function setupEventListeners() {
       if (isAnimating) return;
 
       const session = getSession();
-      if (!session || !State.splashDismissed) return;
+      if (!session) return;
       if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash') return;
 
       // 檢查是否有打開彈窗或抽屜
