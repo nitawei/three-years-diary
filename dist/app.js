@@ -1977,8 +1977,16 @@ function setupEventListeners() {
       isSwipeCancelled = false;
       activeIdx = -1;
       targetIdx = -1;
-      activeEl = null;
-      targetEl = null;
+      if (activeEl) {
+        clearPageTransforms(activeEl);
+        activeEl = null;
+      }
+      if (targetEl) {
+        targetEl.classList.add('hidden');
+        clearPageTransforms(targetEl);
+        targetEl = null;
+      }
+      isAnimating = false;
     };
 
     // TouchStart
@@ -2051,13 +2059,12 @@ function setupEventListeners() {
       // 計算目標分頁索引 (向左滑 dx < 0 ➔ 下一頁 activeIdx + 1；向右滑 dx > 0 ➔ 上一頁 activeIdx - 1)
       const intendedTargetIdx = dx < 0 ? activeIdx + 1 : activeIdx - 1;
 
-      // 邊界阻尼 (Yearly 右滑不切換；Exchange 左滑不切換)
+      // 邊界處理 (第一頁右滑不切換；最後一頁左滑不切換，滑不動且維持原狀)
       if (intendedTargetIdx < 0 || intendedTargetIdx >= PAGE_ORDER.length) {
-        const resistanceDx = dx * 0.2;
-        activeEl.style.transform = `translate3d(${resistanceDx}px, 0, 0)`;
+        activeEl.style.transform = 'translate3d(0, 0, 0)';
         activeEl.style.opacity = '1';
         activeEl.style.zIndex = '2';
-        activeEl.style.boxShadow = '';
+        activeEl.style.boxShadow = 'none';
         if (targetEl) {
           targetEl.classList.add('hidden');
           clearPageTransforms(targetEl);
@@ -2085,19 +2092,19 @@ function setupEventListeners() {
       // 阻尼視覺位移 (手勢判定維持原始 dx，僅頂層紙張 transform 套用 25% 阻尼)
       const dampedDx = dx * (1 - SWIPE_DAMPING);
 
-      // Sheet Reveal Model (頂層紙張掀開，底層紙張完全固定於原位)
-      const shadowStyle = dx < 0
-        ? '6px 0 24px rgba(0, 0, 0, 0.08), 2px 0 6px rgba(0, 0, 0, 0.04)'
-        : '-6px 0 24px rgba(0, 0, 0, 0.08), -2px 0 6px rgba(0, 0, 0, 0.04)';
-
-      // 頂層頁面：被手指拉開，不縮放 (scale: 1)、不透明 (opacity: 1)，帶有紙張邊緣柔和微陰影
+      // Sheet Reveal Model (頂層紙張掀開，底層紙張平緩跟隨貼合)
+      // 頂層頁面：被手指拉開，不縮放 (scale: 1)、不透明 (opacity: 1)，完全無懸浮陰影（自然紙張平面貼合）
       activeEl.style.transform = `translate3d(${dampedDx}px, 0, 0)`;
       activeEl.style.opacity = '1';
       activeEl.style.zIndex = '2';
-      activeEl.style.boxShadow = shadowStyle;
+      activeEl.style.boxShadow = 'none';
 
-      // 底層頁面：完全固定滿版於原位 (0, 0, 0)，無縫承接頂層移開後的視野
-      targetEl.style.transform = 'translate3d(0, 0, 0)';
+      // 底層頁面：極微小（15%）平緩就位位移，賦予兩頁紙張同屬一本手帳的連續貼合感
+      const targetOffset = dx < 0
+        ? (frameWidth * 0.15 + dampedDx * 0.15)
+        : (-frameWidth * 0.15 + dampedDx * 0.15);
+
+      targetEl.style.transform = `translate3d(${targetOffset}px, 0, 0)`;
       targetEl.style.opacity = '1';
       targetEl.style.zIndex = '1';
       targetEl.style.boxShadow = 'none';
@@ -2110,6 +2117,13 @@ function setupEventListeners() {
         return;
       }
 
+      // 邊界防護：若無有效目標頁面 (例如處於邊界向外滑動)，立即安全還原並重置
+      if (!targetEl || targetIdx === -1) {
+        clearPageTransforms(activeEl);
+        resetSwipe();
+        return;
+      }
+
       const touch = e.changedTouches ? e.changedTouches[0] : e;
       const dx = touch.clientX - touchStartX;
       const duration = Date.now() - touchStartTime;
@@ -2117,7 +2131,7 @@ function setupEventListeners() {
 
       const SWIPE_THRESHOLD = frameWidth * 0.25; // 25% 門檻
       const isQuickFlick = velocity > 0.4 && Math.abs(dx) > 30;
-      const shouldSwitch = (Math.abs(dx) > SWIPE_THRESHOLD || isQuickFlick) && targetIdx !== -1 && targetEl;
+      const shouldSwitch = (Math.abs(dx) > SWIPE_THRESHOLD || isQuickFlick);
 
       isAnimating = true;
 
@@ -2147,7 +2161,8 @@ function setupEventListeners() {
         activeEl.style.transform = `translate3d(0, 0, 0)`;
         activeEl.style.opacity = '1';
 
-        targetEl.style.transform = `translate3d(0, 0, 0)`;
+        const finalTargetX = dx < 0 ? (frameWidth * 0.15) : (-frameWidth * 0.15);
+        targetEl.style.transform = `translate3d(${finalTargetX}px, 0, 0)`;
         targetEl.style.opacity = '1';
 
         setTimeout(() => {
