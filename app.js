@@ -1967,6 +1967,7 @@ function setupEventListeners() {
     let activeEl = null;
     let targetEl = null;
     let frameWidth = 0;
+    const SWIPE_DAMPING = 0.25; // 25% Medium Damping 紙張阻尼感 (手移 100px ➔ 紙張移動約 75px)
     let isAnimating = false;
 
     const resetSwipe = () => {
@@ -2079,15 +2080,18 @@ function setupEventListeners() {
 
       if (!targetEl) return;
 
-      // 即時跟手與輕微紙張層疊 (Soft Paper Slide)
-      const progress = Math.min(Math.abs(dx) / frameWidth, 1);
+      // 阻尼視覺位移 (手勢判定維持原始 dx，僅畫面 transform 套用 25% 紙張阻尼)
+      const dampedDx = dx * (1 - SWIPE_DAMPING);
+
+      // 即時跟手與輕微紙張層疊 (Soft Paper Slide with 25% Paper Resistance)
+      const progress = Math.min(Math.abs(dampedDx) / frameWidth, 1);
       const outScale = 1 - progress * 0.02;
       const outOpacity = 1 - progress * 0.04;
-      activeEl.style.transform = `translate3d(${dx}px, 0, 0) scale(${outScale})`;
+      activeEl.style.transform = `translate3d(${dampedDx}px, 0, 0) scale(${outScale})`;
       activeEl.style.opacity = `${outOpacity}`;
       activeEl.style.zIndex = '2';
 
-      const inOffset = dx < 0 ? (frameWidth + dx) : (-frameWidth + dx);
+      const inOffset = dx < 0 ? (frameWidth + dampedDx) : (-frameWidth + dampedDx);
       const inScale = 0.98 + progress * 0.02;
       const inOpacity = 0.96 + progress * 0.04;
       targetEl.style.transform = `translate3d(${inOffset}px, 0, 0) scale(${inScale})`;
