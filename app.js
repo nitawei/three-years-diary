@@ -1820,7 +1820,6 @@ function setupEventListeners() {
     el.classList.remove('slide-transition');
     el.style.transform = '';
     el.style.opacity = '';
-    el.style.zIndex = '';
     el.style.boxShadow = '';
   };
 
@@ -1859,67 +1858,31 @@ function setupEventListeners() {
 
     if (!barToday || !barWeekly || !barGarden || !barPartner || !todayPage || !weeklyPage || !gardenPage || !partnerPage) return;
 
-    // 若指定 animated 且分頁不同，播放平滑紙張滑動
-    if (animated && currentPage !== pageName) {
-      const fromIdx = PAGE_ORDER.indexOf(currentPage);
-      const toIdx = PAGE_ORDER.indexOf(pageName);
-      if (fromIdx !== -1 && toIdx !== -1) {
-        const fromEl = getPageEl(currentPage);
-        const toEl = getPageEl(pageName);
-        if (fromEl && toEl) {
-          const deviceFrame = document.querySelector('.device-frame');
-          const width = deviceFrame ? deviceFrame.getBoundingClientRect().width : window.innerWidth;
-          const isForward = toIdx > fromIdx;
+    const pages = [
+      { id: 'today', el: todayPage, bar: barToday },
+      { id: 'weekly', el: weeklyPage, bar: barWeekly },
+      { id: 'garden', el: gardenPage, bar: barGarden },
+      { id: 'partner', el: partnerPage, bar: barPartner }
+    ];
 
-          toEl.classList.remove('hidden');
-          toEl.style.transform = `translate3d(${isForward ? width : -width}px, 0, 0) scale(0.98)`;
-          toEl.style.opacity = '0.96';
-          toEl.style.zIndex = '1';
-
-          fromEl.style.transform = 'translate3d(0, 0, 0) scale(1)';
-          fromEl.style.opacity = '1';
-          fromEl.style.zIndex = '2';
-
-          void toEl.offsetWidth; // Force reflow
-
-          fromEl.classList.add('slide-transition');
-          toEl.classList.add('slide-transition');
-
-          fromEl.style.transform = `translate3d(${isForward ? -width : width}px, 0, 0) scale(0.98)`;
-          fromEl.style.opacity = '0.96';
-
-          toEl.style.transform = 'translate3d(0, 0, 0) scale(1)';
-          toEl.style.opacity = '1';
-
-          await new Promise(resolve => setTimeout(resolve, 260));
-
-          clearPageTransforms(fromEl);
-          clearPageTransforms(toEl);
-          fromEl.classList.add('hidden');
-        }
-      }
+    // 先確保目標分頁處於可見狀態，絕不先隱藏再顯示 (避免 1-frame 閃爍)
+    const targetPageConfig = pages.find(p => p.id === pageName);
+    if (targetPageConfig) {
+      targetPageConfig.el.classList.remove('hidden');
+      clearPageTransforms(targetPageConfig.el);
+      targetPageConfig.bar.classList.add('active');
     }
 
-    // 重設高亮狀態
-    barToday.classList.remove('active');
-    barWeekly.classList.remove('active');
-    barGarden.classList.remove('active');
-    barPartner.classList.remove('active');
-
-    // 隱藏所有分頁 (若未經動畫已先清理)
-    todayPage.classList.add('hidden');
-    weeklyPage.classList.add('hidden');
-    gardenPage.classList.add('hidden');
-    partnerPage.classList.add('hidden');
-
-    clearPageTransforms(todayPage);
-    clearPageTransforms(weeklyPage);
-    clearPageTransforms(gardenPage);
-    clearPageTransforms(partnerPage);
+    // 隱藏其他非目標分頁並清除 transform
+    pages.forEach(p => {
+      if (p.id !== pageName) {
+        p.el.classList.add('hidden');
+        clearPageTransforms(p.el);
+        p.bar.classList.remove('active');
+      }
+    });
 
     if (pageName === 'today') {
-      barToday.classList.add('active');
-      todayPage.classList.remove('hidden');
       if (customDate) {
         State.activeDate = customDate;
       } else {
@@ -1927,16 +1890,10 @@ function setupEventListeners() {
       }
       await loadTodayData();
     } else if (pageName === 'weekly') {
-      barWeekly.classList.add('active');
-      weeklyPage.classList.remove('hidden');
       await initWeeklyReview();
     } else if (pageName === 'garden') {
-      barGarden.classList.add('active');
-      gardenPage.classList.remove('hidden');
       await initGarden();
     } else if (pageName === 'partner') {
-      barPartner.classList.add('active');
-      partnerPage.classList.remove('hidden');
       await loadTodayData();
     }
   };
@@ -1955,7 +1912,7 @@ function setupEventListeners() {
     barPartner.addEventListener('click', () => switchToPage('partner', null, true));
   }
 
-  // === 左右滑動手勢導航 (Soft Paper Slide Gesture Controller) ===
+  // === 手勢控制：Soft Paper Slide Gesture Controller ===
   const deviceFrame = document.querySelector('.device-frame');
   if (deviceFrame) {
     let touchStartX = 0;
@@ -2085,15 +2042,16 @@ function setupEventListeners() {
       // 阻尼視覺位移 (手勢判定維持原始 dx，僅頂層紙張 transform 套用 25% 阻尼)
       const dampedDx = dx * (1 - SWIPE_DAMPING);
 
-      // 固定物理堆疊模型 (YEARLY: 40 > WEEKLY: 30 > TODAY: 20 > EXCHANGE: 10，不額外覆寫 zIndex)
+      // 固定物理堆疊模型 (YEARLY: 40 > WEEKLY: 30 > TODAY: 20 > EXCHANGE: 10)
+      // 底層紙張永遠 100% 滿版平躺在 (0, 0, 0)，頂層紙張隨手指掀開/蓋回
       if (dx < 0) {
-        // 向左滑 (activeEl 在上、targetEl 在下)：頂層 activeEl 拉開，底層 targetEl 浮現就位
+        // 向左滑 (activeEl 在上、targetEl 在下)：頂層 activeEl 掀開，底層 targetEl 固定在 (0,0,0)
         activeEl.style.transform = `translate3d(${dampedDx}px, 0, 0)`;
-        targetEl.style.transform = `translate3d(${frameWidth * 0.15 + dampedDx * 0.15}px, 0, 0)`;
+        targetEl.style.transform = 'translate3d(0, 0, 0)';
       } else {
-        // 向右滑 (targetEl 在上、activeEl 在下)：頂層 targetEl 自左蓋入，底層 activeEl 承接
+        // 向右滑 (targetEl 在上、activeEl 在下)：頂層 targetEl 自左蓋入，底層 activeEl 固定在 (0,0,0)
         targetEl.style.transform = `translate3d(${-frameWidth + dampedDx}px, 0, 0)`;
-        activeEl.style.transform = `translate3d(${-frameWidth * 0.15 + dampedDx * 0.15}px, 0, 0)`;
+        activeEl.style.transform = 'translate3d(0, 0, 0)';
       }
       activeEl.style.opacity = '1';
       activeEl.style.boxShadow = 'none';
@@ -2132,10 +2090,10 @@ function setupEventListeners() {
 
         if (dx < 0) {
           activeEl.style.transform = `translate3d(${-frameWidth}px, 0, 0)`;
-          targetEl.style.transform = `translate3d(0, 0, 0)`;
+          targetEl.style.transform = 'translate3d(0, 0, 0)';
         } else {
-          targetEl.style.transform = `translate3d(0, 0, 0)`;
-          activeEl.style.transform = `translate3d(${-frameWidth * 0.15}px, 0, 0)`;
+          targetEl.style.transform = 'translate3d(0, 0, 0)';
+          activeEl.style.transform = 'translate3d(0, 0, 0)';
         }
 
         setTimeout(async () => {
@@ -2150,11 +2108,11 @@ function setupEventListeners() {
         targetEl.classList.add('slide-transition');
 
         if (dx < 0) {
-          activeEl.style.transform = `translate3d(0, 0, 0)`;
-          targetEl.style.transform = `translate3d(${frameWidth * 0.15}px, 0, 0)`;
+          activeEl.style.transform = 'translate3d(0, 0, 0)';
+          targetEl.style.transform = 'translate3d(0, 0, 0)';
         } else {
           targetEl.style.transform = `translate3d(${-frameWidth}px, 0, 0)`;
-          activeEl.style.transform = `translate3d(0, 0, 0)`;
+          activeEl.style.transform = 'translate3d(0, 0, 0)';
         }
 
         setTimeout(() => {
