@@ -27,6 +27,9 @@
   --color-mood-red: #E76F51;        /* Wave (Terracotta) */
   --color-text-red: #AB3B3A;        /* Deep red text */
 
+  /* Exchange Page Yesterday Muted Settings */
+  --exchange-yesterday-muted-opacity: 0.55;
+
   /* Ambient Organic Shadows (Large blur + Low opacity) */
   --shadow-premium: 0 20px 40px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.01);
   --shadow-hover: 0 30px 60px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
@@ -1402,6 +1405,23 @@ body {
   margin: 12px 0 0 0;
   padding-left: 4px;
   letter-spacing: 0.02em;
+}
+
+/* Partner Yesterday Card - Scroll-linked Subtle Muting */
+.partner-yesterday-card {
+  --yesterday-content-opacity: 1;
+}
+
+.partner-yesterday-card.is-muted {
+  --yesterday-content-opacity: var(--exchange-yesterday-muted-opacity, 0.55);
+}
+
+.partner-yesterday-card .card-header,
+.partner-yesterday-card .notebook-lines-container,
+.partner-yesterday-card .notebook-date-meta,
+.partner-yesterday-card .memo-indicator {
+  opacity: var(--yesterday-content-opacity, 1);
+  will-change: opacity;
 }
 
 .modal-btn-delete {

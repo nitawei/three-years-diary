@@ -1906,6 +1906,7 @@ function setupEventListeners() {
       await initGarden();
     } else if (pageName === 'partner') {
       await loadTodayData();
+      updatePartnerYesterdayOpacity();
     }
   };
   window.switchToPage = switchToPage;
@@ -1921,6 +1922,19 @@ function setupEventListeners() {
     barWeekly.addEventListener('click', () => switchToPage('weekly', null, true));
     barGarden.addEventListener('click', () => switchToPage('garden', null, true));
     barPartner.addEventListener('click', () => switchToPage('partner', null, true));
+  }
+
+  // === Exchange 頁面滾動監聽（昨日日記動態透明度計算） ===
+  const partnerScrollContainer = document.querySelector('#partner-page .page-content');
+  if (partnerScrollContainer) {
+    partnerScrollContainer.addEventListener('scroll', () => {
+      if (!isPartnerYesterdayMuted) return;
+      if (partnerScrollRafId) return;
+      partnerScrollRafId = requestAnimationFrame(() => {
+        partnerScrollRafId = null;
+        updatePartnerYesterdayOpacity();
+      });
+    }, { passive: true });
   }
 
   // === 手勢控制：Soft Paper Slide Gesture Controller ===
@@ -3545,6 +3559,34 @@ function getYesterdayDateStr(todayStr = TODAY_DATE_STR) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Exchange 昨日日記弱化與滾動恢復常數
+const YESTERDAY_MUTED_OPACITY = 0.55;
+const YESTERDAY_REVEAL_DISTANCE = 120; // 滾動 120px 達到 100% 清晰
+
+let isPartnerYesterdayMuted = false;
+let partnerScrollRafId = null;
+
+function updatePartnerYesterdayOpacity() {
+  const card = document.querySelector('.partner-yesterday-card');
+  if (!card) return;
+  
+  if (!isPartnerYesterdayMuted) {
+    card.classList.remove('is-muted');
+    card.style.setProperty('--yesterday-content-opacity', '1');
+    return;
+  }
+  
+  card.classList.add('is-muted');
+  const scrollContainer = document.querySelector('#partner-page .page-content');
+  const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+  const progress = Math.min(Math.max(scrollTop / YESTERDAY_REVEAL_DISTANCE, 0), 1);
+  const opacity = YESTERDAY_MUTED_OPACITY + (1 - YESTERDAY_MUTED_OPACITY) * progress;
+  card.style.setProperty('--yesterday-content-opacity', opacity.toFixed(3));
+}
+window.updatePartnerYesterdayOpacity = updatePartnerYesterdayOpacity;
+window.YESTERDAY_MUTED_OPACITY = YESTERDAY_MUTED_OPACITY;
+window.YESTERDAY_REVEAL_DISTANCE = YESTERDAY_REVEAL_DISTANCE;
+
 async function renderPartnerYesterdaySection() {
   const yesterdayContainer = document.getElementById('partner-yesterday-container');
   if (!yesterdayContainer) return;
@@ -3667,6 +3709,13 @@ async function renderPartnerYesterdaySection() {
 
     card.appendChild(footer);
     yesterdayContainer.appendChild(card);
+
+    // 判斷筆友今天是否已有日記，決定是否啟用昨日弱化
+    const partnerTodayDiary = await DiaryDB.getDiary(State.activeDate, partnerId);
+    const hasTodayPartnerDiary = Boolean(partnerTodayDiary && typeof partnerTodayDiary.content === 'string' && partnerTodayDiary.content.trim().length > 0);
+
+    isPartnerYesterdayMuted = !hasTodayPartnerDiary;
+    updatePartnerYesterdayOpacity();
   } catch (err) {
     console.warn('[Partner Yesterday] 載入筆友昨日日記失敗:', err);
     yesterdayContainer.innerHTML = '';
