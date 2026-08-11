@@ -176,6 +176,12 @@ body {
   touch-action: pan-y;
 }
 
+/* 固定實體日記本紙張物理堆疊順序 (YEARLY > WEEKLY > TODAY > EXCHANGE) */
+#garden-page { z-index: 40; }
+#weekly-page { z-index: 30; }
+#today-page { z-index: 20; }
+#partner-page { z-index: 10; }
+
 .app-container.slide-transition {
   transition: transform 0.26s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
