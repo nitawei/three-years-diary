@@ -380,6 +380,7 @@ async function handleRouting() {
     
     await loadTodayData();
     await checkBackupReminder();
+    scheduleIdlePrewarm();
   } else if (currentHash === 'weekly') {
     if (todayPage) todayPage.classList.add('hidden');
     if (weeklyPage) weeklyPage.classList.remove('hidden');
@@ -395,6 +396,7 @@ async function handleRouting() {
     if (barPartner) barPartner.classList.remove('active');
     
     await initWeeklyReview();
+    scheduleIdlePrewarm();
   } else if (currentHash === 'garden') {
     if (todayPage) todayPage.classList.add('hidden');
     if (weeklyPage) weeklyPage.classList.add('hidden');
@@ -410,6 +412,11 @@ async function handleRouting() {
     if (barPartner) barPartner.classList.remove('active');
     
     await initGarden();
+    if (!hasGardenBloomed) {
+      triggerGardenBloomAnimation();
+      hasGardenBloomed = true;
+    }
+    scheduleIdlePrewarm();
   } else if (currentHash === 'partner') {
     if (todayPage) todayPage.classList.add('hidden');
     if (weeklyPage) weeklyPage.classList.add('hidden');
@@ -426,8 +433,43 @@ async function handleRouting() {
     if (barPartner) barPartner.classList.add('active');
     
     await loadTodayData();
+    scheduleIdlePrewarm();
   }
 }
+
+// === 背景閒置預熱器 (Background Idle Pre-warming for Weekly & Yearly) ===
+function scheduleIdlePrewarm() {
+  const runPrewarm = async () => {
+    if (!State.currentUser) return;
+    try {
+      if (!isWeeklyInitialized) {
+        await initWeeklyReview();
+      }
+      if (!isGardenInitialized) {
+        await initGarden();
+      }
+    } catch (err) {
+      console.warn('[Prewarm] Background prewarm failed:', err);
+    }
+  };
+
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    return new Promise(resolve => {
+      window.requestIdleCallback(async () => {
+        await runPrewarm();
+        resolve();
+      }, { timeout: 2000 });
+    });
+  } else {
+    return new Promise(resolve => {
+      setTimeout(async () => {
+        await runPrewarm();
+        resolve();
+      }, 400);
+    });
+  }
+}
+window.scheduleIdlePrewarm = scheduleIdlePrewarm;
 
 // Onboarding 暱稱字數即時計算與驗證
 function validateDisplayName(name) {
@@ -1532,6 +1574,7 @@ function setupEventListeners() {
       // 重新載入新角色的今日頁面與 Yearly/Weekly
       isGardenInitialized = false;
       isWeeklyInitialized = false;
+      hasGardenBloomed = false;
       await loadTodayData();
       await initGarden(true);
       await initWeeklyReview(true);
@@ -1695,6 +1738,7 @@ function setupEventListeners() {
       State.activeDate = e.target.value;
       isGardenInitialized = false;
       isWeeklyInitialized = false;
+      hasGardenBloomed = false;
       await loadTodayData();
       await initGarden(true);
       await initWeeklyReview(true);
@@ -1851,10 +1895,11 @@ function setupEventListeners() {
     if (barWeekly && barWeekly.classList.contains('active')) return 'weekly';
     if (barToday && barToday.classList.contains('active')) return 'today';
     if (barPartner && barPartner.classList.contains('active')) return 'partner';
-    const hash = window.location.hash.substring(1);
+    const hash = typeof window !== 'undefined' && window.location && window.location.hash ? window.location.hash.substring(1) : '';
     if (PAGE_ORDER.includes(hash)) return hash;
     return 'today';
   };
+  window.getCurrentActivePage = getCurrentActivePage;
 
   const clearPageTransforms = (el) => {
     if (!el) return;
@@ -1934,6 +1979,12 @@ function setupEventListeners() {
       await initWeeklyReview();
     } else if (pageName === 'garden') {
       await initGarden();
+      const bloomed = (typeof hasGardenBloomed !== 'undefined') ? hasGardenBloomed : (typeof window !== 'undefined' ? window.hasGardenBloomed : false);
+      if (!bloomed && typeof triggerGardenBloomAnimation === 'function') {
+        triggerGardenBloomAnimation();
+        if (typeof hasGardenBloomed !== 'undefined') hasGardenBloomed = true;
+        if (typeof window !== 'undefined') window.hasGardenBloomed = true;
+      }
     } else if (pageName === 'partner') {
       await loadTodayData();
       updatePartnerYesterdayOpacity();
@@ -3302,6 +3353,7 @@ function getGardenYearsOrder() {
 }
 
 let isGardenInitialized = false;
+let hasGardenBloomed = false;
 const gardenDotMap = new Map();
 
 function updateGardenDot(dateStr, mood) {
@@ -3320,6 +3372,8 @@ function updateGardenDot(dateStr, mood) {
 window.updateGardenDot = updateGardenDot;
 window.gardenDotMap = gardenDotMap;
 window.initGarden = initGarden;
+window.getIsGardenInitialized = () => isGardenInitialized;
+window.getHasGardenBloomed = () => hasGardenBloomed;
 
 async function initGarden(force = false) {
   if (!State.currentUser) {
@@ -3342,6 +3396,20 @@ async function initGarden(force = false) {
 
   const container = document.getElementById('garden-grids-container');
   if (container) {
+    // 事件委託 (Event Delegation): 僅在父容器綁定一次 click 監聽，取代 1,096 個獨立監聽器
+    if (!container._delegatedClickBound) {
+      container._delegatedClickBound = true;
+      container.addEventListener('click', (e) => {
+        const dot = e.target && e.target.closest ? e.target.closest('.garden-dot') : null;
+        if (dot) {
+          const dateStr = dot.getAttribute('data-date');
+          if (dateStr) {
+            showGardenDetailModal(dateStr);
+          }
+        }
+      });
+    }
+
     // Check if grids are already rendered in the correct order to prevent DOM thrashing
     const existingCards = container.querySelectorAll('.garden-year-card');
     let needsRebuild = existingCards.length !== years.length || !isGardenInitialized || force;
@@ -3394,9 +3462,6 @@ async function initGarden(force = false) {
           dot.className = 'garden-dot';
           dot.setAttribute('data-date', dateStr);
           dot.title = dateStr.replace(/-/g, '.');
-          dot.addEventListener('click', () => {
-            showGardenDetailModal(dateStr);
-          });
           gardenDotMap.set(dateStr, dot);
           dotsFragment.appendChild(dot);
         }
@@ -3410,10 +3475,19 @@ async function initGarden(force = false) {
   // 更新各點著色與統計數據
   await updateGardenDotsColor();
   
-  // 首次初始化才觸發漸進綻放 bloom 動畫
+  // 首次初始化
   if (!isGardenInitialized) {
-    triggerGardenBloomAnimation();
     isGardenInitialized = true;
+    // 若當前正是 garden 頁面才觸發 bloom 動畫；若為背景預熱則延遲至使用者真正進入 Yearly 時觸發
+    const activePage = (typeof window !== 'undefined' && typeof window.getCurrentActivePage === 'function')
+      ? window.getCurrentActivePage()
+      : (typeof getCurrentActivePage === 'function' ? getCurrentActivePage() : 'today');
+    const bloomed = (typeof hasGardenBloomed !== 'undefined') ? hasGardenBloomed : (typeof window !== 'undefined' ? window.hasGardenBloomed : false);
+    if (activePage === 'garden' && !bloomed && typeof triggerGardenBloomAnimation === 'function') {
+      triggerGardenBloomAnimation();
+      if (typeof hasGardenBloomed !== 'undefined') hasGardenBloomed = true;
+      if (typeof window !== 'undefined') window.hasGardenBloomed = true;
+    }
   }
 }
 
@@ -3463,12 +3537,21 @@ async function updateGardenDotsColor() {
 // 4. 漸進綻放 bloom 動畫（延遲逐格出現，僅在初次載入執行）
 function triggerGardenBloomAnimation() {
   const dots = document.querySelectorAll('.garden-dot');
+  if (dots.length === 0) return;
   
-  dots.forEach((dot, index) => {
-    // 延遲在 0ms 到 600ms 之間隨機分佈，產生繁花點點盛開的效果
-    const delay = Math.random() * 600;
+  // 將 1096 個點隨機分配至 6 個批次 (0ms ~ 500ms)，大幅減少定時器數量並保留隨機盛開視覺效果
+  const BUCKET_COUNT = 6;
+  const buckets = Array.from({ length: BUCKET_COUNT }, () => []);
+  
+  dots.forEach(dot => {
+    const bucketIdx = Math.floor(Math.random() * BUCKET_COUNT);
+    buckets[bucketIdx].push(dot);
+  });
+  
+  buckets.forEach((batch, idx) => {
+    const delay = idx * 100;
     setTimeout(() => {
-      dot.classList.add('bloom');
+      batch.forEach(dot => dot.classList.add('bloom'));
     }, delay);
   });
 }
@@ -4054,6 +4137,7 @@ async function initWeeklyReview(force = false) {
   isWeeklyInitialized = true;
 }
 window.initWeeklyReview = initWeeklyReview;
+window.getIsWeeklyInitialized = () => isWeeklyInitialized;
 
 // 2. WeeklyReview 元件：計算日期區間、查詢資料庫並渲染列表
 async function renderWeeklyReview() {
