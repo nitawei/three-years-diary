@@ -3,7 +3,7 @@
  * Background check for new app version without affecting Firebase, IndexedDB, or Sync.
  */
 (function() {
-  const CURRENT_APP_VERSION = "1.1.0";
+  const CURRENT_APP_VERSION = "1.2.0";
 
   const UpdateManager = {
     currentVersion: CURRENT_APP_VERSION,
@@ -104,7 +104,7 @@
         background-color: var(--color-card-bg, #fcfaf2);
         border: 1px solid var(--color-border, #e5e0d8);
         border-radius: 16px;
-        padding: 28px 24px;
+        padding: 26px 20px 22px 20px;
         max-width: 320px;
         width: 100%;
         text-align: center;
@@ -113,11 +113,19 @@
       `;
 
       modalSheet.innerHTML = `
-        <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; font-weight: 700; color: var(--color-text-main, #2b2b2b);">三年日記有新版本</h3>
-        <p style="margin: 0 0 24px 0; font-size: 0.92rem; color: var(--color-text-sub, #666); line-height: 1.5;">更新後即可使用最新功能。</p>
+        <h3 style="margin: 0 0 6px 0; font-size: 1.18rem; font-weight: 700; color: var(--color-text-main, #2b2b2b); letter-spacing: 0.02em;">1095 Diary 有新版本</h3>
+        <div style="display: inline-block; padding: 2px 10px; border-radius: 12px; background-color: rgba(138, 154, 134, 0.15); color: var(--color-mood-green, #61735d); font-size: 0.78rem; font-weight: 700; font-family: 'Outfit', -apple-system, sans-serif; margin-bottom: 16px;">v1.2.0 · Emoji 支援</div>
+        <div style="background-color: rgba(0, 0, 0, 0.02); border: 1px dashed var(--color-border, #e5e0d8); border-radius: 12px; padding: 12px 14px; margin-bottom: 20px; text-align: left;">
+          <div style="font-size: 0.9rem; font-weight: 700; color: var(--color-text-main, #2b2b2b); margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+            <span>🌱</span><span>現在可以在日記中使用 Emoji 啦！</span>
+          </div>
+          <p style="margin: 0; font-size: 0.82rem; color: var(--color-text-sub, #666); line-height: 1.5;">
+            支援表情符號、膚色修飾、國旗與複合 Emoji。<br>每個 Emoji 都會精準計算為 1 個字，也會完整佔用一格稿紙。
+          </p>
+        </div>
         <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
           <button id="btn-update-now" style="width: 100%; padding: 12px; border: none; border-radius: 24px; background-color: var(--color-text-main, #2b2b2b); color: #fff; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">立即更新</button>
-          <button id="btn-update-later" style="width: 100%; padding: 10px; border: none; background: none; color: var(--color-text-sub, #666); font-size: 0.88rem; cursor: pointer;">稍後提醒</button>
+          <button id="btn-update-later" style="width: 100%; padding: 8px; border: none; background: none; color: var(--color-text-sub, #666); font-size: 0.88rem; cursor: pointer;">稍後提醒</button>
         </div>
       `;
 
