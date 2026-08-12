@@ -185,6 +185,23 @@ body {
 #today-page { z-index: 20; }
 #partner-page { z-index: 10; }
 
+/* Phase 2-G: 4 大核心頁面在 hidden 狀態下使用 visibility: hidden + 離屏常駐保留於 Render Tree，消除冷啟動 Layout (10ms) 與 GPU Commit (18ms) */
+#garden-page.hidden,
+#weekly-page.hidden,
+#today-page.hidden,
+#partner-page.hidden {
+  display: flex !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translate3d(-100vw, 0, 0) !important;
+}
+
+#splash-page.hidden,
+#login-page.hidden,
+#onboarding-page.hidden {
+  display: none !important;
+}
+
 .app-container.slide-transition {
   transition: transform 0.26s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
