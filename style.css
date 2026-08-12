@@ -1176,6 +1176,8 @@ body {
   margin-bottom: 24px;
   padding: 16px;
   contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: 720px;
 }
 
 .text-accent {
@@ -1203,7 +1205,6 @@ body {
   border-radius: 50%; /* Circle shape */
   background-color: var(--color-border-visible);
   cursor: pointer;
-  transition: transform 0.2s ease-out, background-color 0.25s ease-out;
   position: relative;
   
   /* Initial state for entry animation */
