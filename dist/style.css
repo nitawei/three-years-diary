@@ -1175,6 +1175,7 @@ body {
 .garden-year-card {
   margin-bottom: 24px;
   padding: 16px;
+  contain: content;
 }
 
 .text-accent {
@@ -1532,6 +1533,7 @@ body {
   gap: 8px;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  contain: content;
 }
 
 .diary-review-card:hover {
