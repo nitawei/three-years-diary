@@ -4083,6 +4083,7 @@ window.renderPartnerYesterdaySection = renderPartnerYesterdaySection;
 
 // 1. 初始化週記介面按鈕與載入邏輯
 let isWeeklyInitialized = false;
+let weeklyInitPromise = null;
 const weeklyCardMap = new Map();
 
 async function updateWeeklyCard(dateStr, diary) {
@@ -4106,56 +4107,71 @@ window.updateWeeklyCard = updateWeeklyCard;
 async function initWeeklyReview(force = false) {
   if (!State.currentUser) return;
   
-  if (!isWeeklyInitialized) {
-    const btnPrev = document.getElementById('btn-prev-week');
-    const btnNext = document.getElementById('btn-next-week');
-    
-    if (btnPrev && btnNext) {
-      btnPrev.addEventListener('click', async () => {
-        State.weeklyOffset--;
-        await renderWeeklyReview();
-      });
-      
-      btnNext.addEventListener('click', async () => {
-        if (State.weeklyOffset < 0) {
-          State.weeklyOffset++;
-          await renderWeeklyReview();
-        }
-      });
-    }
-
-    // 點擊 WEEKLY 字樣標題跳轉回當週
-    const weeklyTitle = document.querySelector('#weekly-page .header-title');
-    if (weeklyTitle) {
-      weeklyTitle.addEventListener('click', async () => {
-        if (State.weeklyOffset !== 0) {
-          State.weeklyOffset = 0;
-          await renderWeeklyReview();
-        }
-      });
-    }
-  }
-
   // 若已初始化且未強制重建，直接保留既有 DOM，避免 swipe 閃爍
   if (isWeeklyInitialized && !force) {
     return;
   }
+
+  // Safeguard 1: In-flight Promise lock. 若已有進行中的初始化，直接返回同一個 Promise，防止並發重複執行
+  if (weeklyInitPromise) {
+    return weeklyInitPromise;
+  }
+
+  // 1. 首次綁定按鈕監聽事件（同步設置一次）
+  const btnPrev = document.getElementById('btn-prev-week');
+  const btnNext = document.getElementById('btn-next-week');
   
-  await renderWeeklyReview();
-  isWeeklyInitialized = true;
+  if (btnPrev && btnNext && !btnPrev.__weeklyBound) {
+    btnPrev.__weeklyBound = true;
+    btnPrev.addEventListener('click', async () => {
+      State.weeklyOffset--;
+      await renderWeeklyReview();
+    });
+    
+    btnNext.addEventListener('click', async () => {
+      if (State.weeklyOffset < 0) {
+        State.weeklyOffset++;
+        await renderWeeklyReview();
+      }
+    });
+  }
+
+  // 點擊 WEEKLY 字樣標題跳轉回當週
+  const weeklyTitle = document.querySelector('#weekly-page .header-title');
+  if (weeklyTitle && !weeklyTitle.__weeklyBound) {
+    weeklyTitle.__weeklyBound = true;
+    weeklyTitle.addEventListener('click', async () => {
+      if (State.weeklyOffset !== 0) {
+        State.weeklyOffset = 0;
+        await renderWeeklyReview();
+      }
+    });
+  }
+
+  // Safeguard 2: Correct initialization lifecycle with In-flight Lock
+  weeklyInitPromise = (async () => {
+    try {
+      await renderWeeklyReview();
+      isWeeklyInitialized = true;
+    } catch (err) {
+      console.error('[Weekly Init] Failed to render weekly review:', err);
+    } finally {
+      weeklyInitPromise = null;
+    }
+  })();
+
+  return weeklyInitPromise;
 }
 window.initWeeklyReview = initWeeklyReview;
 window.getIsWeeklyInitialized = () => isWeeklyInitialized;
 
-// 2. WeeklyReview 元件：計算日期區間、查詢資料庫並渲染列表
+// 2. WeeklyReview 元件：計算日期區間、查詢資料庫並原子化渲染列表
 async function renderWeeklyReview() {
   const rangeText = document.getElementById('weekly-range-text');
   const reviewList = document.getElementById('weekly-review-list');
   const btnNext = document.getElementById('btn-next-week');
   
   if (!reviewList) return;
-  reviewList.innerHTML = '';
-  weeklyCardMap.clear();
   
   // 計算本週 7 天的日期序列（降冪排列）
   const dates = [];
@@ -4186,14 +4202,38 @@ async function renderWeeklyReview() {
     btnNext.disabled = (State.weeklyOffset === 0);
   }
   
-  // 遍歷日期渲染各個日記卡片
+  // Safeguard 3: Atomic DOM rendering using DocumentFragment
+  const fragment = (typeof document !== 'undefined' && typeof document.createDocumentFragment === 'function') 
+    ? document.createDocumentFragment() 
+    : [];
+  const newCardMap = new Map();
+
   for (const dateStr of dates) {
     const diary = await DiaryDB.getDiary(dateStr, State.currentUser);
     const cardNode = createDiaryReviewCard(dateStr, diary);
-    weeklyCardMap.set(dateStr, cardNode);
-    reviewList.appendChild(cardNode);
+    newCardMap.set(dateStr, cardNode);
+    if (fragment.appendChild) {
+      fragment.appendChild(cardNode);
+    } else if (Array.isArray(fragment)) {
+      fragment.push(cardNode);
+    }
   }
   
+  // 一次性原子替換 live DOM，杜絕並發 append 導致的卡片重複
+  if (fragment.nodeType) {
+    if (typeof reviewList.replaceChildren === 'function') {
+      reviewList.replaceChildren(fragment);
+    } else {
+      reviewList.innerHTML = '';
+      reviewList.appendChild(fragment);
+    }
+  } else if (Array.isArray(fragment)) {
+    reviewList.innerHTML = '';
+    fragment.forEach(node => reviewList.appendChild(node));
+  }
+  weeklyCardMap.clear();
+  newCardMap.forEach((node, date) => weeklyCardMap.set(date, node));
+
   // 重新渲染 Lucide 圖標
   try {
     lucide.createIcons();
