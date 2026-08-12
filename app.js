@@ -2130,6 +2130,9 @@ function setupEventListeners() {
         return;
       }
 
+      // 阻尼視覺位移 (手勢判定維持原始 dx，僅頂層紙張 transform 套用 25% 阻尼)
+      const dampedDx = dx * (1 - SWIPE_DAMPING);
+
       // 更新目標元素
       if (targetIdx !== intendedTargetIdx) {
         if (targetEl) {
@@ -2139,14 +2142,19 @@ function setupEventListeners() {
         targetIdx = intendedTargetIdx;
         targetEl = getPageEl(PAGE_ORDER[targetIdx]);
         if (targetEl) {
+          // 關鍵效能優化：目標頁面進入 Render Tree 前先設定正確的起始 transform，消除 (0,0,0) 1-frame 誤繪與跳動
+          if (dx < 0) {
+            targetEl.style.transform = 'translate3d(0, 0, 0)';
+          } else {
+            targetEl.style.transform = `translate3d(${-frameWidth + dampedDx}px, 0, 0)`;
+          }
+          targetEl.style.opacity = '1';
+          targetEl.style.boxShadow = 'none';
           targetEl.classList.remove('hidden');
         }
       }
 
       if (!targetEl) return;
-
-      // 阻尼視覺位移 (手勢判定維持原始 dx，僅頂層紙張 transform 套用 25% 阻尼)
-      const dampedDx = dx * (1 - SWIPE_DAMPING);
 
       // 固定物理堆疊模型 (YEARLY: 40 > WEEKLY: 30 > TODAY: 20 > EXCHANGE: 10)
       // 底層紙張永遠 100% 滿版平躺在 (0, 0, 0)，頂層紙張隨手指掀開/蓋回
