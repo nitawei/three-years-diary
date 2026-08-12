@@ -777,11 +777,11 @@ function initManuscriptGrid() {
 
 function updateManuscriptCells(text) {
   const cells = document.querySelectorAll('#manuscript-grid .manuscript-cell');
-  const trimmed = text.slice(0, 50); // 限制最多 50 字
+  const graphemes = getGraphemes(text).slice(0, 50); // 限制最多 50 個 Grapheme
 
   cells.forEach((cell, idx) => {
-    if (idx < trimmed.length) {
-      cell.textContent = trimmed[idx];
+    if (idx < graphemes.length) {
+      cell.textContent = graphemes[idx];
       cell.classList.add('has-char');
     } else {
       cell.textContent = '';
@@ -796,7 +796,8 @@ function highlightManuscriptCursor() {
   if (!textarea) return;
   
   const caretPos = textarea.selectionStart;
-  const targetIdx = Math.min(caretPos, 49);
+  const graphemesBeforeCaret = getGraphemes(textarea.value.slice(0, caretPos));
+  const targetIdx = Math.min(graphemesBeforeCaret.length, 49);
   const cell = document.querySelector(`#manuscript-grid .manuscript-cell[data-index="${targetIdx}"]`);
   if (cell) {
     cell.classList.add('active-cursor');
@@ -822,15 +823,15 @@ function renderPartnerManuscriptGrid(content, mood = 'black') {
     container.className = `manuscript-container mood-${mood}`;
   }
   
-  const trimmed = (content || '').slice(0, 50);
+  const graphemes = getGraphemes(content || '').slice(0, 50);
   
   // 建立 50 個唯讀格子
   for (let i = 0; i < 50; i++) {
     const cell = document.createElement('div');
     cell.className = 'manuscript-cell';
     
-    if (trimmed && i < trimmed.length) {
-      cell.textContent = trimmed[i];
+    if (graphemes && i < graphemes.length) {
+      cell.textContent = graphemes[i];
       cell.classList.add('has-char');
     }
     
@@ -886,7 +887,7 @@ async function loadTodayData() {
         }
       }
       textarea.value = loadedContent;
-      State.diaryWordCount = loadedContent.length;
+      State.diaryWordCount = Math.min(getGraphemes(loadedContent).length, 50);
       document.getElementById('diary-word-count').textContent = `${State.diaryWordCount} / 50`;
       updateManuscriptCells(loadedContent);
     }
@@ -1240,7 +1241,13 @@ function setupEventListeners() {
       const targetIdx = Math.min(Math.max(row * 10 + col, 0), 49);
 
       const text = textarea.value || '';
-      const newPos = Math.min(targetIdx, text.length);
+      const graphemes = getGraphemes(text);
+      let newPos = 0;
+      if (targetIdx >= graphemes.length) {
+        newPos = text.length;
+      } else {
+        newPos = graphemes.slice(0, targetIdx).join('').length;
+      }
 
       textarea.focus();
       if (typeof textarea.setSelectionRange === 'function') {
@@ -1276,8 +1283,14 @@ function setupEventListeners() {
     });
 
     textarea.addEventListener('input', (e) => {
-      const text = e.target.value;
-      State.diaryWordCount = text.length;
+      const rawText = e.target.value;
+      const graphemes = getGraphemes(rawText);
+      let text = rawText;
+      if (graphemes.length > 50) {
+        text = graphemes.slice(0, 50).join('');
+        e.target.value = text;
+      }
+      State.diaryWordCount = Math.min(graphemes.length, 50);
       document.getElementById('diary-word-count').textContent = `${State.diaryWordCount} / 50`;
       updateManuscriptCells(text);
       highlightManuscriptCursor();
@@ -4958,10 +4971,10 @@ function initEditDiaryManuscriptGrid() {
 
 function updateEditManuscriptCells(text) {
   const cells = document.querySelectorAll('#edit-manuscript-grid .manuscript-cell');
-  const trimmed = text.slice(0, 50);
+  const graphemes = getGraphemes(text).slice(0, 50);
   cells.forEach((cell, idx) => {
-    if (idx < trimmed.length) {
-      cell.textContent = trimmed[idx];
+    if (idx < graphemes.length) {
+      cell.textContent = graphemes[idx];
       cell.classList.add('has-char');
     } else {
       cell.textContent = '';
@@ -4975,7 +4988,8 @@ function highlightEditManuscriptCursor() {
   const textarea = document.getElementById('edit-diary-textarea');
   if (!textarea) return;
   const caretPos = textarea.selectionStart;
-  const targetIdx = Math.min(caretPos, 49);
+  const graphemesBeforeCaret = getGraphemes(textarea.value.slice(0, caretPos));
+  const targetIdx = Math.min(graphemesBeforeCaret.length, 49);
   const cell = document.querySelector(`#edit-manuscript-grid .manuscript-cell[data-index="${targetIdx}"]`);
   if (cell) {
     cell.classList.add('active-cursor');
@@ -5018,7 +5032,7 @@ async function openEditDiaryDrawer(dateStr) {
   
   textarea.value = content;
   if (wordCount) {
-    wordCount.textContent = `${content.length} / 50`;
+    wordCount.textContent = `${getGraphemes(content).length} / 50`;
   }
   
   // 4. 更新格線文字與心情容器顏色
@@ -5056,8 +5070,14 @@ async function openEditDiaryDrawer(dateStr) {
     
     // 輸入監聽
     textarea.addEventListener('input', (e) => {
-      const text = e.target.value;
-      if (wordCount) wordCount.textContent = `${text.length} / 50`;
+      const rawText = e.target.value;
+      const graphemes = getGraphemes(rawText);
+      let text = rawText;
+      if (graphemes.length > 50) {
+        text = graphemes.slice(0, 50).join('');
+        e.target.value = text;
+      }
+      if (wordCount) wordCount.textContent = `${Math.min(graphemes.length, 50)} / 50`;
       updateEditManuscriptCells(text);
       highlightEditManuscriptCursor();
     });
@@ -5115,7 +5135,7 @@ async function openEditDiaryDrawer(dateStr) {
             const mainTextarea = document.getElementById('diary-textarea');
             if (mainTextarea) {
               mainTextarea.value = textarea.value;
-              State.diaryWordCount = textarea.value.length;
+              State.diaryWordCount = getGraphemes(textarea.value).length;
               document.getElementById('diary-word-count').textContent = `${State.diaryWordCount} / 50`;
               updateManuscriptCells(textarea.value);
             }

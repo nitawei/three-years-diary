@@ -44,9 +44,35 @@ function isSafeImageUri(uri) {
   return false;
 }
 
+/**
+ * 分割字串為使用者感知字元 (Grapheme Clusters) 陣列
+ * 支援 Emoji、Skin-tone 修飾、ZWJ 複合 Emoji、變體選擇器與國旗
+ */
+function getGraphemes(text) {
+  if (!text) return [];
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter('zh-TW', { granularity: 'grapheme' });
+    return Array.from(segmenter.segment(text), s => s.segment);
+  }
+  // Fallback 相容舊環境
+  return Array.from(text);
+}
+
+/**
+ * 依 Grapheme 截斷字串至指定最大數量 (預設 50 字)
+ */
+function truncateGraphemes(text, maxCount = 50) {
+  if (!text) return '';
+  const graphemes = getGraphemes(text);
+  if (graphemes.length <= maxCount) return text;
+  return graphemes.slice(0, maxCount).join('');
+}
+
 // Expose to window for modular accessibility
 window.MOOD_COLORS = MOOD_COLORS;
 window.CHINESE_WEEKDAYS = CHINESE_WEEKDAYS;
 window.getChineseWeekday = getChineseWeekday;
 window.escapeHtml = escapeHtml;
 window.isSafeImageUri = isSafeImageUri;
+window.getGraphemes = getGraphemes;
+window.truncateGraphemes = truncateGraphemes;
