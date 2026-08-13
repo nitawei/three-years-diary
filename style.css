@@ -461,6 +461,12 @@ body {
   opacity: 0.9;
   transform: translateY(-1px);
 }
+.btn-save-pill:disabled,
+.btn-save-pill.disabled-btn {
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
 
 /* 3. Centered Plus Button below Card 1 */
 .plus-button-container {

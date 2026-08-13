@@ -228,29 +228,31 @@
                 <i data-lucide="bookmark" class="icon-muted"></i>
               </div>
               
-              <input type="hidden" id="memo-id-input" value="">
+              <div id="memo-input-section">
+                <input type="hidden" id="memo-id-input" value="">
 
-              <!-- 備忘錄輸入框 -->
-              <textarea id="memo-textarea" placeholder="寫下詳細的心情隨筆或日常記錄..."></textarea>
+                <!-- 備忘錄輸入框 -->
+                <textarea id="memo-textarea" placeholder="寫下詳細的心情隨筆或日常記錄..."></textarea>
 
-              <!-- 圖片加入區 -->
-              <div class="memo-actions-row">
-                <div class="upload-controls">
-                  <label for="image-upload-input" class="btn-add-photos">
-                    <i data-lucide="image" class="icon-inline"></i> 加入圖片
-                  </label>
-                  <input type="file" id="image-upload-input" accept="image/*" multiple class="hidden">
-                  <span class="upload-status" id="upload-status-text">未加入圖片</span>
+                <!-- 圖片加入區 -->
+                <div class="memo-actions-row">
+                  <div class="upload-controls">
+                    <label for="image-upload-input" class="btn-add-photos">
+                      <i data-lucide="image" class="icon-inline"></i> 加入圖片
+                    </label>
+                    <input type="file" id="image-upload-input" accept="image/*" multiple class="hidden">
+                    <span class="upload-status" id="upload-status-text">未加入圖片</span>
+                  </div>
+                  
+                  <div class="submit-controls">
+                    <button id="btn-cancel-memo" class="btn-cancel-pill hidden" title="取消修改"><i data-lucide="x"></i></button>
+                    <button id="btn-submit-memo" class="btn-submit-pill">ADD</button>
+                  </div>
                 </div>
                 
-                <div class="submit-controls">
-                  <button id="btn-cancel-memo" class="btn-cancel-pill hidden" title="取消修改"><i data-lucide="x"></i></button>
-                  <button id="btn-submit-memo" class="btn-submit-pill">ADD</button>
-                </div>
+                <!-- 選擇的圖片預覽 -->
+                <div id="memo-images-preview" class="memo-images-grid"></div>
               </div>
-              
-              <!-- 選擇的圖片預覽 -->
-              <div id="memo-images-preview" class="memo-images-grid"></div>
 
               <!-- 動態時光備忘 timeline 列表 -->
               <div class="memo-timeline" id="memo-timeline-list">
@@ -469,7 +471,20 @@
              <button class="btn-partner-action" id="btn-logout" style="width: 100%; padding: var(--space-xs) 0; background-color: rgba(0,0,0,0.03); border: 1px solid var(--color-border); color: var(--color-text-main); font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; text-align: center;">
                登出帳號
              </button>
-           </div>
+            </div>
+
+            <!-- 日記週期管理 -->
+            <div style="text-align: left; margin-bottom: var(--space-xxl); border-bottom: 1px dashed var(--color-border); padding-bottom: var(--space-xl); width: 100%; box-sizing: border-box;">
+              <h3 style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs); text-align: left;">日記週期</h3>
+              <p style="font-size: var(--font-size-base); color: var(--color-text-sub); margin-bottom: var(--space-lg); line-height: 1.5; text-align: left;">
+                目前的三年日記週期：<span id="settings-current-cycle-span" style="font-weight: 700; color: var(--color-text-main);">-</span>
+              </p>
+              <div style="display: flex; gap: var(--space-xs); align-items: center; justify-content: flex-start;">
+                <button class="btn-partner-action" id="btn-start-new-cycle" style="flex: 1; padding: var(--space-xs) 0; background-color: var(--color-primary-light); border: 1px solid var(--color-border); color: var(--color-text-main); font-size: var(--font-size-base); font-weight: 700; border-radius: var(--radius-pill); cursor: pointer; text-align: center;">
+                  開啟新一輪三年日記
+                </button>
+              </div>
+            </div>
 
            <!-- 2. 資料管理 -->
            <div style="text-align: left; margin-bottom: var(--space-xxl); border-bottom: 1px dashed var(--color-border); padding-bottom: var(--space-xl); width: 100%; box-sizing: border-box;">
@@ -584,10 +599,10 @@
         
         <div class="garden-modal-body" style="padding: var(--space-sm) var(--space-xxl) var(--space-3xl) var(--space-xxl); text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box;">
           <p style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-xs);">
-            Your three-year journey is complete.
+            這三年的故事，已經完成。
           </p>
           <p style="font-size: var(--font-size-base); color: var(--color-text-sub); line-height: 1.5; margin-bottom: var(--space-3xl);">
-            您的三年日記旅程已圓滿完成！請選擇您想如何保存這些珍貴記憶：
+            你可以將這段回憶封存，並開始下一段三年旅程。封存後，這段日記仍會永久保留，但將轉為只能閱讀的歷史紀錄。
           </p>
           
           <div style="display: flex; flex-direction: column; gap: var(--space-md); width: 100%; box-sizing: border-box;">
@@ -598,7 +613,7 @@
             
             <!-- 選項二 -->
             <button class="btn-save-pill" id="btn-completion-opt2" style="background-color: var(--color-primary-light); color: var(--color-text-main); border: 1px solid var(--color-border); padding: 12px 0; font-weight: 700; font-size: var(--font-size-md); border-radius: var(--radius-pill); cursor: pointer; width: 100%; box-sizing: border-box;">
-              選項二：封存日記並開啟新三年週期
+              選項二：封存三年回憶 (保留全部日記，並開啟新一輪)
             </button>
 
             <!-- 暫時關閉/略過 -->

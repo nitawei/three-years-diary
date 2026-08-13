@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'ThreeYearDiaryDB';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 class DiaryDB {
   static useLocalStorage = false;
@@ -54,6 +54,11 @@ class DiaryDB {
           // 2. 使用者 Store：以 id 為 Key
           if (!db.objectStoreNames.contains('users')) {
             db.createObjectStore('users', { keyPath: 'id' });
+          }
+
+          // 4. 封存 Store：以 id 為 Key
+          if (!db.objectStoreNames.contains('archives')) {
+            db.createObjectStore('archives', { keyPath: 'id' });
           }
 
           // 3. 備忘錄 Store v2 升級 (二元複合主鍵 ['userId', 'id'])
@@ -232,6 +237,9 @@ class DiaryDB {
 
   static async saveDiary(diary, userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for saveDiary");
+    if (await this.isDateInArchivedCycle(diary.date, userId)) {
+      throw new Error("[ReadOnlyCycleError] Cannot modify archived cycle entries: " + diary.date);
+    }
     // 檢查並設定 startedAt 啟動三年旅程
     try {
       const user = await this.getUser(userId);
@@ -279,6 +287,9 @@ class DiaryDB {
 
   static async deleteMemosForDate(date, userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for deleteMemosForDate");
+    if (await this.isDateInArchivedCycle(date, userId)) {
+      throw new Error("[ReadOnlyCycleError] Cannot modify archived cycle entries: " + date);
+    }
     try {
       const db = await this.open();
       const memos = await this.getMemosForDate(date, userId);
@@ -315,6 +326,9 @@ class DiaryDB {
 
   static async deleteDiary(date, userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for deleteDiary");
+    if (await this.isDateInArchivedCycle(date, userId)) {
+      throw new Error("[ReadOnlyCycleError] Cannot modify archived cycle entries: " + date);
+    }
     // 刪除日記的同時也刪除隨筆
     await this.deleteMemosForDate(date, userId);
 
@@ -382,6 +396,9 @@ class DiaryDB {
 
   static async saveMemo(memo, userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for saveMemo");
+    if (memo && memo.date && await this.isDateInArchivedCycle(memo.date, userId)) {
+      throw new Error("[ReadOnlyCycleError] Cannot modify archived cycle entries: " + memo.date);
+    }
     const validUserId = memo.userId || userId;
     let validId = memo.id;
     if (validId === undefined || validId === null || validId === '') {
@@ -433,6 +450,11 @@ class DiaryDB {
 
   static async saveMemos(memosArray, userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for saveMemos");
+    for (const memo of memosArray) {
+      if (memo && memo.date && await this.isDateInArchivedCycle(memo.date, userId)) {
+        throw new Error("[ReadOnlyCycleError] Cannot modify archived cycle entries: " + memo.date);
+      }
+    }
     if (!Array.isArray(memosArray) || memosArray.length === 0) return true;
     try {
       const db = await this.open();
@@ -464,6 +486,10 @@ class DiaryDB {
   static async deleteMemo(id, userId) {
     if (id === undefined || id === null) return true;
     if (!userId) throw new Error("[DiaryDB] userId is required for deleteMemo");
+    const memo = await this.getMemo(id, userId);
+    if (memo && memo.date && await this.isDateInArchivedCycle(memo.date, userId)) {
+      throw new Error("[ReadOnlyCycleError] Cannot modify archived cycle entries: " + memo.date);
+    }
     const numId = Number(id);
     const validId = (!isNaN(numId) && String(numId) === String(id)) ? numId : id;
     try {
@@ -611,6 +637,134 @@ class DiaryDB {
     }
   }
 
+  static async clearCycleData(userId, startYear, endYear) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for clearCycleData");
+    
+    // 1. LocalStorage
+    try {
+      const isUserB = userId === 'user_b';
+      const diariesStr = localStorage.getItem('diary_diaries');
+      if (diariesStr) {
+        const diaries = JSON.parse(diariesStr);
+        const newDiaries = {};
+        Object.keys(diaries).forEach(k => {
+          const isUserBKey = k.startsWith('user_b_');
+          if ((isUserB && isUserBKey) || (!isUserB && !isUserBKey)) {
+            const datePart = isUserBKey ? k.replace('user_b_', '') : k;
+            const y = Number(datePart.split('-')[0]);
+            if (y < startYear || y > endYear) {
+              newDiaries[k] = diaries[k];
+            }
+          } else {
+            newDiaries[k] = diaries[k];
+          }
+        });
+        localStorage.setItem('diary_diaries', JSON.stringify(newDiaries));
+      }
+
+      const memosStr = localStorage.getItem('diary_memos');
+      if (memosStr) {
+        const memos = JSON.parse(memosStr);
+        const newMemos = memos.filter(m => {
+          const memoUser = m.userId || 'user_a';
+          if (memoUser === userId) {
+            const y = Number(m.date.split('-')[0]);
+            return y < startYear || y > endYear;
+          }
+          return true;
+        });
+        localStorage.setItem('diary_memos', JSON.stringify(newMemos));
+      }
+    } catch (lsErr) {
+      console.warn('LocalStorage clearCycleData fallback:', lsErr);
+    }
+
+    // 2. Memory caches
+    try {
+      const isUserB = userId === 'user_b';
+      Object.keys(this.memoryDiaries).forEach(k => {
+        const isUserBKey = k.startsWith('user_b_');
+        if ((isUserB && isUserBKey) || (!isUserB && !isUserBKey)) {
+          const datePart = isUserBKey ? k.replace('user_b_', '') : k;
+          const y = Number(datePart.split('-')[0]);
+          if (y >= startYear && y <= endYear) {
+            delete this.memoryDiaries[k];
+          }
+        }
+      });
+
+      this.memoryMemos = this.memoryMemos.filter(m => {
+        const memoUser = m.userId || 'user_a';
+        if (memoUser === userId) {
+          const y = Number(m.date.split('-')[0]);
+          return y < startYear || y > endYear;
+        }
+        return true;
+      });
+    } catch (memErr) {
+      console.warn('Memory Cache clearCycleData fallback:', memErr);
+    }
+
+    // 3. IndexedDB
+    try {
+      const db = await this.open();
+      const storesToClear = ['diaries'];
+      if (db.objectStoreNames.contains('memos_v2')) storesToClear.push('memos_v2');
+      else if (db.objectStoreNames.contains('memos')) storesToClear.push('memos');
+
+      const transaction = db.transaction(storesToClear, 'readwrite');
+      const diaryStore = transaction.objectStore('diaries');
+      const memoStore = storesToClear.includes('memos_v2') ? transaction.objectStore('memos_v2') : (storesToClear.includes('memos') ? transaction.objectStore('memos') : null);
+
+      await new Promise((resolve, reject) => {
+        const request = diaryStore.openKeyCursor();
+        request.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const key = cursor.primaryKey;
+            const isUserBKey = typeof key === 'string' && key.startsWith('user_b_');
+            if ((userId === 'user_b' && isUserBKey) || (userId === 'user_a' && !isUserBKey)) {
+              const datePart = isUserBKey ? key.replace('user_b_', '') : key;
+              const y = Number(datePart.split('-')[0]);
+              if (y >= startYear && y <= endYear) {
+                diaryStore.delete(key);
+              }
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        request.onerror = () => reject(request.error);
+      });
+
+      if (memoStore) {
+        await new Promise((resolve, reject) => {
+          const request = memoStore.openCursor();
+          request.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              const memo = cursor.value;
+              const memoUser = memo ? (memo.userId || 'user_a') : '';
+              if (memoUser === userId) {
+                const y = Number(memo.date.split('-')[0]);
+                if (y >= startYear && y <= endYear) {
+                  memoStore.delete(cursor.primaryKey);
+                }
+              }
+              cursor.continue();
+            } else {
+              resolve();
+            }
+          };
+          request.onerror = () => reject(request.error);
+        });
+      }
+    } catch (dbErr) {
+      console.warn('IndexedDB clearCycleData error:', dbErr);
+    }
+  }
+
   static async getCompletedDiariesCount(userId) {
     if (!userId) throw new Error("[DiaryDB] userId is required for getCompletedDiariesCount");
     const all = await this.getAllDiaries(userId);
@@ -723,6 +877,118 @@ class DiaryDB {
         console.warn('LocalStorage blocked, using memory fallback:', lsErr);
         delete this.memoryUsers[userId];
         return true;
+      }
+    }
+  }
+
+  static async getMemo(id, userId) {
+    if (!userId) throw new Error("[DiaryDB] userId is required for getMemo");
+    const numId = Number(id);
+    const validId = (!isNaN(numId) && String(numId) === String(id)) ? numId : id;
+    try {
+      const db = await this.open();
+      return await new Promise((resolve, reject) => {
+        const transaction = db.transaction('memos_v2', 'readonly');
+        const store = transaction.objectStore('memos_v2');
+        const request = store.get([userId, validId]);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (err) {
+      try {
+        const memos = JSON.parse(localStorage.getItem('diary_memos') || '[]');
+        return memos.find(m => String(m.id) === String(id) && m.userId === userId) || null;
+      } catch (lsErr) {
+        return this.memoryMemos.find(m => String(m.id) === String(id) && m.userId === userId) || null;
+      }
+    }
+  }
+
+  static async isDateInArchivedCycle(dateStr, userId) {
+    if (!userId) return false;
+    const user = await this.getUser(userId);
+    let activeCycleStartYear;
+    if (user && user.activeCycleStartYear) {
+      activeCycleStartYear = Number(user.activeCycleStartYear);
+    } else {
+      const activeYear = localStorage.getItem(`active_cycle_start_year_${userId}`);
+      if (activeYear) {
+        activeCycleStartYear = Number(activeYear);
+      } else {
+        const startYear = localStorage.getItem(`cycle_start_year_${userId}`);
+        if (startYear) {
+          activeCycleStartYear = Number(startYear);
+        } else {
+          if (user && user.startedAt) {
+            activeCycleStartYear = Number(user.startedAt.split('-')[0]);
+          } else {
+            activeCycleStartYear = 2024;
+          }
+        }
+      }
+    }
+    const year = Number(dateStr.split('-')[0]);
+    return year < activeCycleStartYear;
+  }
+
+  static async saveArchive(archive, userId) {
+    try {
+      const db = await this.open();
+      return await new Promise((resolve, reject) => {
+        const transaction = db.transaction('archives', 'readwrite');
+        const store = transaction.objectStore('archives');
+        const request = store.put(archive);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (err) {
+      console.warn('saveArchive IndexedDB failed, trying LocalStorage:', err);
+      try {
+        const archives = JSON.parse(localStorage.getItem('diary_archives') || '[]');
+        const idx = archives.findIndex(a => a.id === archive.id);
+        if (idx !== -1) {
+          archives[idx] = archive;
+        } else {
+          archives.push(archive);
+        }
+        localStorage.setItem('diary_archives', JSON.stringify(archives));
+        return archive.id;
+      } catch (lsErr) {
+        console.warn('LocalStorage blocked, using memory fallback:', lsErr);
+        if (!this.memoryArchives) this.memoryArchives = [];
+        const idx = this.memoryArchives.findIndex(a => a.id === archive.id);
+        if (idx !== -1) {
+          this.memoryArchives[idx] = archive;
+        } else {
+          this.memoryArchives.push(archive);
+        }
+        return archive.id;
+      }
+    }
+  }
+
+  static async getAllArchives(userId) {
+    try {
+      const db = await this.open();
+      return await new Promise((resolve, reject) => {
+        const transaction = db.transaction('archives', 'readonly');
+        const store = transaction.objectStore('archives');
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const results = request.result || [];
+          resolve(results.filter(a => a.userId === userId));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (err) {
+      console.warn('getAllArchives IndexedDB failed, trying LocalStorage:', err);
+      try {
+        const archives = JSON.parse(localStorage.getItem('diary_archives') || '[]');
+        return archives.filter(a => a.userId === userId);
+      } catch (lsErr) {
+        console.warn('LocalStorage blocked, using memory fallback:', lsErr);
+        if (!this.memoryArchives) this.memoryArchives = [];
+        return this.memoryArchives.filter(a => a.userId === userId);
       }
     }
   }

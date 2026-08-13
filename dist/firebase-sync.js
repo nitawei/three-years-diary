@@ -85,7 +85,23 @@
           }
         }
 
-        const finalDisplayName = (profile.displayName && profile.displayName.trim()) ? profile.displayName.trim() : displayName;
+        const finalDisplayName = profile.displayName || displayName || autoName;
+
+        let cycleStartYearVal = profile.activeCycleStartYear;
+        const localActiveStart = localStorage.getItem(`active_cycle_start_year_${user.uid}`);
+        if (!cycleStartYearVal) {
+          if (localActiveStart) {
+            cycleStartYearVal = Number(localActiveStart);
+            try {
+              await userRef.set({ activeCycleStartYear: cycleStartYearVal }, { merge: true });
+            } catch (fsErr) {
+              console.warn("Failed to write activeCycleStartYear to Firestore on login:", fsErr);
+            }
+          } else {
+            cycleStartYearVal = profile.startedAt ? Number(profile.startedAt.split('-')[0]) : 2024;
+          }
+        }
+
         console.log("[Firebase Auth] User profile & publicProfile active:", finalDisplayName);
         
         // Save user profile locally to IndexedDB
@@ -96,9 +112,11 @@
           provider: 'google',
           createdAt: profile.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          startedAt: profile.startedAt || TODAY_DATE_STR
+          startedAt: profile.startedAt || TODAY_DATE_STR,
+          activeCycleStartYear: cycleStartYearVal
         });
 
+        localStorage.setItem(`active_cycle_start_year_${user.uid}`, String(cycleStartYearVal));
         const startYear = new Date(profile.startedAt || TODAY_DATE_STR).getFullYear();
         localStorage.setItem(`cycle_start_year_${user.uid}`, String(startYear));
         localStorage.setItem(`cycle_start_date_${user.uid}`, profile.startedAt || TODAY_DATE_STR);
@@ -108,6 +126,7 @@
 
         // Subscribe to partner info updates
         startPartnerInfoListener(user.uid);
+        startArchivesListener(user.uid);
         
         // Process any pending local sync items to Firestore
         if (window.SyncManager) window.SyncManager.processQueue();
@@ -121,6 +140,7 @@
         console.error("[Firebase Auth] Error fetching user profile:", err);
         try {
           const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : '筆友');
+          const fallbackStartYear = Number(TODAY_DATE_STR.split('-')[0]);
           await DiaryDB.saveUser({
             id: user.uid,
             displayName: fallbackName,
@@ -128,7 +148,8 @@
             provider: 'google',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            startedAt: TODAY_DATE_STR
+            startedAt: TODAY_DATE_STR,
+            activeCycleStartYear: fallbackStartYear
           });
           console.log("[Firebase Auth] Graceful fallback applied for Google user, redirecting to today");
           if (window.location.hash === '#login' || window.location.hash === '#onboarding' || window.location.hash === '#splash' || !window.location.hash) {
@@ -178,6 +199,7 @@
     if (partnerUnsubscribe) { partnerUnsubscribe(); partnerUnsubscribe = null; }
     if (partnerDiariesUnsubscribe) { partnerDiariesUnsubscribe(); partnerDiariesUnsubscribe = null; }
     if (partnerMemosUnsubscribe) { partnerMemosUnsubscribe(); partnerMemosUnsubscribe = null; }
+    if (archivesUnsubscribe) { archivesUnsubscribe(); archivesUnsubscribe = null; }
     currentPartnerId = null;
     currentConnectedAt = null;
   }
@@ -294,6 +316,30 @@
           }
         }
       }
+
+      // 3. Sync archives from Cloud Firestore to IndexedDB
+      try {
+        const archivesSnap = await window.db.collection('users').doc(uid).collection('archives').get();
+        for (const doc of archivesSnap.docs) {
+          const data = doc.data();
+          await DiaryDB.saveArchive({
+            id: doc.id,
+            userId: uid,
+            name: data.name || `${data.startYear || data.cycleStartYear || 2024}-${data.endYear || data.cycleEndYear || 2026} 年日記`,
+            startYear: data.startYear || data.cycleStartYear || 2024,
+            endYear: data.endYear || data.cycleEndYear || 2026,
+            cycleStartYear: data.cycleStartYear || data.startYear || 2024,
+            cycleEndYear: data.cycleEndYear || data.endYear || 2026,
+            dateRange: data.dateRange || `${data.startYear || data.cycleStartYear || 2024}-${data.endYear || data.cycleEndYear || 2026}`,
+            diaries: data.diaries || [],
+            memos: data.memos || [],
+            archivedAt: data.archivedAt || new Date().toISOString()
+          }, uid);
+        }
+      } catch (archErr) {
+        console.warn("[Sync] Error syncing archives from Firestore:", archErr);
+      }
+
       console.log("[Sync] User data downloaded successfully.");
     } catch (err) {
       console.error("[Sync] Error syncing from Firestore:", err);
@@ -959,6 +1005,39 @@
       });
   }
 
+  let archivesUnsubscribe = null;
+
+  function startArchivesListener(uid) {
+    if (archivesUnsubscribe) archivesUnsubscribe();
+    if (!uid || uid === 'user_a' || uid === 'user_b' || !window.db) return;
+
+    console.log("[Sync] Subscribing to archives collection for user:", uid);
+    archivesUnsubscribe = window.db.collection('users').doc(uid).collection('archives')
+      .onSnapshot(async (querySnap) => {
+        if (!querySnap) return;
+        for (const change of querySnap.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            const data = change.doc.data();
+            await DiaryDB.saveArchive({
+              id: change.doc.id,
+              userId: uid,
+              name: data.name || `${data.startYear || data.cycleStartYear || 2024}-${data.endYear || data.cycleEndYear || 2026} 年日記`,
+              startYear: data.startYear || data.cycleStartYear || 2024,
+              endYear: data.endYear || data.cycleEndYear || 2026,
+              cycleStartYear: data.cycleStartYear || data.startYear || 2024,
+              cycleEndYear: data.cycleEndYear || data.endYear || 2026,
+              dateRange: data.dateRange || `${data.startYear || data.cycleStartYear || 2024}-${data.endYear || data.cycleEndYear || 2026}`,
+              diaries: data.diaries || [],
+              memos: data.memos || [],
+              archivedAt: data.archivedAt || new Date().toISOString()
+            }, uid);
+          }
+        }
+      }, (err) => {
+        console.warn("[Sync] Error in archives listener:", err);
+      });
+  }
+
   function stopPartnerDataListeners() {
     if (partnerDiariesUnsubscribe) { partnerDiariesUnsubscribe(); partnerDiariesUnsubscribe = null; }
     if (partnerMemosUnsubscribe) { partnerMemosUnsubscribe(); partnerMemosUnsubscribe = null; }
@@ -1021,6 +1100,29 @@
               items: memoItems,
               updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+          }
+        } else if (item.action === 'save_archive') {
+          if (item.data && item.data.id) {
+            await window.db.collection('users').doc(uid).collection('archives').doc(item.data.id).set({
+              id: item.data.id,
+              name: item.data.name,
+              dateRange: item.data.dateRange,
+              cycleStartYear: item.data.cycleStartYear,
+              cycleEndYear: item.data.cycleEndYear,
+              startYear: item.data.cycleStartYear,
+              endYear: item.data.cycleEndYear,
+              archivedAt: item.data.archivedAt,
+              diaries: item.data.diaries,
+              memos: item.data.memos,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          }
+        } else if (item.action === 'update_active_cycle') {
+          if (item.data && item.data.activeCycleStartYear) {
+            await window.db.collection('users').doc(uid).set({
+              activeCycleStartYear: item.data.activeCycleStartYear,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
           }
         }
         queue.shift();
@@ -1522,6 +1624,7 @@
       const userDoc = await window.db.collection('users').doc(mockUid).get();
       if (userDoc.exists) {
         const profile = userDoc.data();
+        const cycleStartYearVal = profile.activeCycleStartYear || (profile.startedAt ? Number(profile.startedAt.split('-')[0]) : 2024);
         await DiaryDB.saveUser({
           id: mockUid,
           displayName: profile.displayName,
@@ -1529,13 +1632,16 @@
           provider: 'google',
           createdAt: profile.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          startedAt: profile.startedAt || TODAY_DATE_STR
+          startedAt: profile.startedAt || TODAY_DATE_STR,
+          activeCycleStartYear: cycleStartYearVal
         });
+        localStorage.setItem(`active_cycle_start_year_${mockUid}`, String(cycleStartYearVal));
         const startYear = new Date(profile.startedAt || TODAY_DATE_STR).getFullYear();
         localStorage.setItem(`cycle_start_year_${mockUid}`, String(startYear));
         localStorage.setItem(`cycle_start_date_${mockUid}`, profile.startedAt || TODAY_DATE_STR);
         await syncAllFromFirestore(mockUid);
         startPartnerInfoListener(mockUid);
+        startArchivesListener(mockUid);
         window.location.hash = 'today';
       } else {
         window.location.hash = 'onboarding';
@@ -1568,11 +1674,13 @@
         const createdAt = new Date().toISOString();
 
         try {
+          const startYear = new Date(startedAt).getFullYear();
           // Save to Firestore
           await window.db.collection('users').doc(user.uid).set({
             displayName: displayName,
             createdAt: createdAt,
-            startedAt: startedAt
+            startedAt: startedAt,
+            activeCycleStartYear: startYear
           });
 
           // Save to local IndexedDB
@@ -1583,10 +1691,11 @@
             provider: 'google',
             createdAt: createdAt,
             updatedAt: new Date().toISOString(),
-            startedAt: startedAt
+            startedAt: startedAt,
+            activeCycleStartYear: startYear
           });
 
-          const startYear = new Date(startedAt).getFullYear();
+          localStorage.setItem(`active_cycle_start_year_${user.uid}`, String(startYear));
           localStorage.setItem(`cycle_start_year_${user.uid}`, String(startYear));
           localStorage.setItem(`cycle_start_date_${user.uid}`, startedAt);
 

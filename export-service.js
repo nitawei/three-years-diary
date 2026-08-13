@@ -2,9 +2,28 @@
  * export-service.js - 三年日記 HTML/PDF 匯出服務
  */
 
-async function generateExportHTML(userId) {
-  const startYear = getCycleStartYear();
-  const years = [startYear, startYear + 1, startYear + 2];
+async function generateExportHTML(target) {
+  let startYear;
+  let years;
+  let isArchiveMode = false;
+  let archive = null;
+  let userId = null;
+
+  if (target && typeof target === 'object') {
+    isArchiveMode = true;
+    archive = target;
+    const yearsRange = (archive.dateRange || '').split('-').map(Number);
+    startYear = yearsRange[0] || (typeof getCycleStartYear === 'function' ? getCycleStartYear() : 2024);
+    const endYear = yearsRange[1] || (startYear + 2);
+    years = [];
+    for (let y = startYear; y <= endYear; y++) {
+      years.push(y);
+    }
+  } else {
+    userId = target || (typeof State !== 'undefined' ? State.currentUser : 'user_a');
+    startYear = (typeof getCycleStartYear === 'function') ? getCycleStartYear() : 2024;
+    years = [startYear, startYear + 1, startYear + 2];
+  }
   
   // 建立 53 週日曆對照結構 (處理閏年 Feb 29 封存支援)
   const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
@@ -44,12 +63,17 @@ async function generateExportHTML(userId) {
     return weekdays[d.getDay()];
   }
 
+  const titleRange = isArchiveMode ? (archive.dateRange || `${startYear}-${startYear + 2}`) : `${startYear}-${startYear + 2}`;
+  const headerSubtitle = isArchiveMode 
+    ? `封存時間：${new Date(archive.id || Date.now()).toLocaleString()}`
+    : `備份對象：${userId === (typeof State !== 'undefined' ? State.currentUser : 'user_a') ? `我 (${userId === 'user_a' ? 'User A' : 'User B'})` : `筆友 (${userId === 'user_a' ? 'User A' : 'User B'})`} · 備份時間：${new Date().toLocaleString()}`;
+
   let html = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Archived Diary_${startYear}-${startYear + 2}</title>
+      <title>Archived Diary_${titleRange}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Outfit:wght@400;700&display=swap');
         body {
@@ -143,24 +167,26 @@ async function generateExportHTML(userId) {
           color: #999;
           margin-right: 4px;
         }
-        .pdf-thumbnail-grid {
+        .pdf-images-grid {
           display: flex;
-          gap: 6px;
+          flex-direction: column;
+          gap: 4px;
           margin-top: 6px;
-          flex-wrap: wrap;
+          width: 100%;
         }
-        .pdf-thumbnail-grid.multi-photos {
-          flex-direction: row-reverse;
-          justify-content: flex-start;
-          max-width: 156px; /* Exactly 3 thumbnails * 48px + 2 gaps * 6px */
-          margin-left: auto;
+        .pdf-image-wrapper {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          border-radius: 2px;
+          background-color: #f3f3f3;
         }
-        .pdf-thumbnail {
-          width: 48px;
-          height: 48px;
+        .pdf-image-wrapper img {
+          width: 100%;
+          height: 100%;
           object-fit: cover;
-          border-radius: 4px;
-          border: 1px solid #ddd;
+          display: block;
         }
         @media print {
           body {
@@ -172,8 +198,8 @@ async function generateExportHTML(userId) {
     </head>
     <body>
       <div class="header">
-        <h1>Archived Diary_${startYear}-${startYear + 2}</h1>
-        <p>備份對象：${userId === State.currentUser ? `我 (${userId === 'user_a' ? 'User A' : 'User B'})` : `筆友 (${userId === 'user_a' ? 'User A' : 'User B'})`} · 備份時間：${new Date().toLocaleString()}</p>
+        <h1>Archived Diary_${titleRange}</h1>
+        <p>${headerSubtitle}</p>
       </div>
   `;
 
@@ -191,11 +217,26 @@ async function generateExportHTML(userId) {
       const dayMemos = [];
       let hasAnyMemo = false;
 
-      for (let idx = 0; idx < 3; idx++) {
+      for (let idx = 0; idx < years.length; idx++) {
         const year = years[idx];
-        const dateStr = `${year}-${mmStr}-${ddStr}`;
-        const diary = await DiaryDB.getDiary(dateStr, userId);
-        const memos = await DiaryDB.getMemosForDate(dateStr, userId);
+        const fullDateStr = `${year}-${mmStr}-${ddStr}`;
+        let diary = null;
+        let memos = [];
+
+        if (isArchiveMode) {
+          diary = (archive.diaries || []).find(d => {
+            const parts = (d.date || '').split('_');
+            const dStr = parts[parts.length - 1];
+            return dStr === fullDateStr;
+          }) || null;
+          memos = (archive.memos || []).filter(m => m.date === fullDateStr);
+        } else {
+          const dbInstance = (typeof DiaryDB !== 'undefined' ? DiaryDB : (typeof window !== 'undefined' ? window.DiaryDB : null));
+          if (dbInstance) {
+            diary = await dbInstance.getDiary(fullDateStr, userId);
+            memos = await dbInstance.getMemosForDate(fullDateStr, userId);
+          }
+        }
 
         dayDiaries.push(diary);
         dayMemos.push(memos);
@@ -223,7 +264,7 @@ async function generateExportHTML(userId) {
       `;
 
       // 1. 表頭列
-      for (let idx = 0; idx < 3; idx++) {
+      for (let idx = 0; idx < years.length; idx++) {
         const year = years[idx];
         const dayOfWeek = getChineseDayOfWeek(year, dt.month, dt.day);
         tableHtml += `<th>${year} (${dayOfWeek})</th>`;
@@ -237,7 +278,7 @@ async function generateExportHTML(userId) {
       `;
 
       // 2. 日記內容列
-      for (let idx = 0; idx < 3; idx++) {
+      for (let idx = 0; idx < years.length; idx++) {
         const diary = dayDiaries[idx];
         if (diary && diary.content && diary.content.trim()) {
           const mColor = moodColors[diary.mood] || '#333333';
@@ -259,7 +300,7 @@ async function generateExportHTML(userId) {
         tableHtml += `
               <tr>
         `;
-        for (let idx = 0; idx < 3; idx++) {
+        for (let idx = 0; idx < years.length; idx++) {
           const memos = dayMemos[idx];
           if (memos && memos.length > 0) {
             tableHtml += `<td><div class="pdf-memo-list">`;
@@ -269,11 +310,30 @@ async function generateExportHTML(userId) {
                   <span class="pdf-memo-time">${m.time}:</span>${escapeHtml(m.content)}
               `;
               if (m.images && m.images.length > 0) {
-                const isMulti = m.images.length > 1;
-                tableHtml += `<div class="pdf-thumbnail-grid${isMulti ? ' multi-photos' : ''}">`;
-                m.images.forEach(img => {
-                  const safeImg = isSafeImageUri(img) ? img : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-                  tableHtml += `<img src="${safeImg}" class="pdf-thumbnail">`;
+                tableHtml += `<div class="pdf-images-grid">`;
+                m.images.forEach(imgData => {
+                  const parseFn = (typeof parseMemoImageData === 'function') ? parseMemoImageData : ((item) => {
+                    if (!item) return { original: '', hasCrop: false, crop: null };
+                    if (typeof item === 'string') return { original: item, hasCrop: false, crop: null };
+                    if (typeof item === 'object') return { original: item.original || item.url || '', hasCrop: Boolean(item.crop), crop: item.crop || null };
+                    return { original: '', hasCrop: false, crop: null };
+                  });
+                  const { original, hasCrop, crop } = parseFn(imgData);
+                  const safeImg = (typeof isSafeImageUri === 'function' && isSafeImageUri(original)) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                  
+                  let styleAttr = '';
+                  if (hasCrop && crop) {
+                    const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+                    const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+                    const sc = crop.scale !== undefined ? crop.scale : 1;
+                    let styleParts = [`object-position: ${px}% ${py}%`];
+                    if (sc > 1.001) {
+                      styleParts.push(`transform: scale(${sc})`);
+                      styleParts.push(`transform-origin: ${px}% ${py}%`);
+                    }
+                    styleAttr = ` style="${styleParts.join('; ')};"`;
+                  }
+                  tableHtml += `<div class="pdf-image-wrapper"><img src="${safeImg}"${styleAttr} class="pdf-memo-photo" alt="隨筆照片"></div>`;
                 });
                 tableHtml += `</div>`;
               }
@@ -310,7 +370,7 @@ async function generateExportHTML(userId) {
   if (totalRecords === 0) {
     html += `
       <div style="text-align: center; margin-top: 100px; color: #888;">
-        <p>目前沒有任何日記與隨筆記錄可以匯出。</p>
+        <p>${isArchiveMode ? '此封存中沒有任何日記與隨筆記錄。' : '目前沒有任何日記與隨筆記錄可以匯出。'}</p>
       </div>
     `;
   }
@@ -323,5 +383,7 @@ async function generateExportHTML(userId) {
   return html;
 }
 
-// Expose globally
+// Expose globally as Single Source of Truth
 window.generateExportHTML = generateExportHTML;
+window.generateExportHTMLForArchive = (archive) => generateExportHTML(archive);
+

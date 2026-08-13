@@ -122,6 +122,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // 6b. 個人封存檔案 (100% 私有隔離)
+    match /users/{userId}/archives/{archiveId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     // 7. 公開 Profile 資訊 (僅放 displayName，Owner 讀寫 & 已登入使用者公開唯讀以供邀請預覽)
     match /users/{userId}/publicProfile/{docId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
