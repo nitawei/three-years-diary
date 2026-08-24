@@ -13,11 +13,6 @@ service cloud.firestore {
         date >= get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.sharingStartDate;
     }
 
-    function isPartner(uidA, uidB) {
-      return exists(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))) &&
-        get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.status == 'active' &&
-        uidA in get(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))).data.memberUids;
-    }
 
     function isPartnerMemoActive(uidA, uidB, date) {
       return exists(/databases/$(database)/documents/partnerships/$(getPairId(uidA, uidB))) &&
