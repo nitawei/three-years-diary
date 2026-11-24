@@ -449,7 +449,7 @@ async function runAll() {
     assert.strictEqual(app.formatMemoIndicator(150), '· 99+');
   });
 
-  await itAsync('createDiaryReviewCard renders bottom-right memo badge counting memo entries (not photos)', async () => {
+  await itAsync('createDiaryReviewCard renders clean cards without premature memo badge count or redundant header buttons', async () => {
     sandbox.State = { currentUser: 'user_a' };
     const dateStr = '2026-07-15';
     const diary = { content: 'Today was good', mood: 'yellow' };
@@ -458,16 +458,16 @@ async function runAll() {
       { id: 102, content: 'Memo 2', images: ['img3'] }
     ];
 
-    // Card with 2 memo entries (even though total photos is 3)
+    // Card with memos does not display memo count on the card (displayed only when clicked into modal)
     const card = app.createDiaryReviewCard(dateStr, diary, memos);
     const badge = card.querySelector('.weekly-card-memo-badge');
-    assert.ok(badge, 'Weekly card has memo badge');
-    assert.strictEqual(badge.textContent, '· 2', 'Badge displays memo record count (2), not photo count (3)');
+    assert.strictEqual(badge, null, 'Weekly review card does not display memo count badge on the card surface');
 
-    // Card with 0 memos
-    const cardEmpty = app.createDiaryReviewCard(dateStr, diary, []);
-    const badgeEmpty = cardEmpty.querySelector('.weekly-card-memo-badge');
-    assert.strictEqual(badgeEmpty, null, 'Weekly card without memos has no memo badge');
+    // Header only contains date label; redundant delete button and mood dot are removed
+    const header = card.querySelector('.diary-review-card-header');
+    assert.ok(header, 'Header exists');
+    assert.strictEqual(header.querySelector('button'), null, 'Header does not have delete button');
+    assert.strictEqual(header.querySelector('.diary-review-card-mood-dot'), null, 'Header does not have mood dot');
   });
 
   console.log(`\n======================================`);
