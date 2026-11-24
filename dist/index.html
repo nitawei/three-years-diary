@@ -183,7 +183,7 @@
                   <button class="mood-dot dot-charcoal active" data-mood="black" title="普通"></button>
                   <button class="mood-dot dot-gold" data-mood="yellow" title="喜悅"></button>
                   <button class="mood-dot dot-sage" data-mood="green" title="平靜"></button>
-                  <button class="mood-dot dot-sky" data-mood="blue" title="孤單"></button>
+                  <button class="mood-dot dot-sky" data-mood="blue" title="難過"></button>
                   <button class="mood-dot dot-coral" data-mood="red" title="波瀾"></button>
                 </div>
               </div>
@@ -248,6 +248,18 @@
                     <button id="btn-cancel-memo" class="btn-cancel-pill hidden" title="取消修改"><i data-lucide="x"></i></button>
                     <button id="btn-submit-memo" class="btn-submit-pill">ADD</button>
                   </div>
+                </div>
+
+                <!-- 每日隨筆容量狀態 (Phase 2-B) -->
+                <div id="memo-capacity-widget" class="memo-capacity-widget">
+                  <div class="memo-capacity-meta">
+                    <span class="memo-capacity-text" id="memo-capacity-text">讀取容量中...</span>
+                    <span class="memo-capacity-badge hidden" id="memo-capacity-badge"></span>
+                  </div>
+                  <div class="memo-capacity-bar-track">
+                    <div class="memo-capacity-bar-fill" id="memo-capacity-bar-fill" style="width: 0%;"></div>
+                  </div>
+                  <div class="memo-capacity-hint hidden" id="memo-capacity-hint"></div>
                 </div>
                 
                 <!-- 選擇的圖片預覽 -->
@@ -673,7 +685,7 @@
                 <button class="mood-dot dot-charcoal active" data-mood="black" title="普通"></button>
                 <button class="mood-dot dot-gold" data-mood="yellow" title="喜悅"></button>
                 <button class="mood-dot dot-sage" data-mood="green" title="平靜"></button>
-                <button class="mood-dot dot-sky" data-mood="blue" title="孤單"></button>
+                <button class="mood-dot dot-sky" data-mood="blue" title="難過"></button>
                 <button class="mood-dot dot-coral" data-mood="red" title="波瀾"></button>
               </div>
             </div>

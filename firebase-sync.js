@@ -749,9 +749,14 @@
       partnerMemosUnsubscribe();
       partnerMemosUnsubscribe = null;
     }
-    partnerMemosState = 'ACTIVE';
 
     const todayDate = TODAY_DATE_STR;
+    if (sharingStartDate && todayDate < sharingStartDate) {
+      console.log("[Partner Memos Today] Today is before sharingStartDate, skipping listener.");
+      return;
+    }
+
+    partnerMemosState = 'ACTIVE';
     partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos').doc(todayDate)
       .onSnapshot(async (docSnap) => {
         partnerMemosState = 'ACTIVE';
@@ -831,6 +836,9 @@
           stack: new Error().stack
         });
         console.warn("[Partner Profile Sync] Public profile listener notice:", err);
+        if (window.updatePartnerDisplayNamesInUI) {
+          window.updatePartnerDisplayNamesInUI('筆友');
+        }
       });
   }
 
@@ -916,10 +924,15 @@
           const data = docSnap.data();
           const items = (data && Array.isArray(data.items)) ? data.items : [];
           await DiaryDB.deleteMemosForDate(date, partnerId);
-          for (const item of items) {
-            await DiaryDB.saveMemo(item, partnerId);
+          if (items.length > 0) {
+            const normalizedItems = items.map(item => ({
+              ...item,
+              date: date
+            }));
+            await DiaryDB.saveMemos(normalizedItems, partnerId);
+            return normalizedItems;
           }
-          return items;
+          return [];
         } else {
           await DiaryDB.deleteMemosForDate(date, partnerId);
           return [];
@@ -937,73 +950,6 @@
       return [];
     }
   };
-
-  function startPartnerMemosListener(partnerId, sharingStartDate) {
-    if (partnerMemosUnsubscribe) partnerMemosUnsubscribe();
-
-    const todayDate = TODAY_DATE_STR;
-    if (sharingStartDate && todayDate < sharingStartDate) {
-      console.log("[Partner Memos Today] Today is before sharingStartDate, skipping listener.");
-      return;
-    }
-
-    partnerMemosUnsubscribe = window.db.collection('users').doc(partnerId).collection('memos').doc(todayDate)
-      .onSnapshot(async (docSnap) => {
-        try {
-          if (docSnap.exists) {
-            const data = docSnap.data();
-            const items = (data && Array.isArray(data.items)) ? data.items : [];
-            await DiaryDB.deleteMemosForDate(todayDate, partnerId);
-            for (const item of items) {
-              await DiaryDB.saveMemo(item, partnerId);
-            }
-          } else {
-            await DiaryDB.deleteMemosForDate(todayDate, partnerId);
-          }
-          if (window.loadTodayData) await window.loadTodayData();
-        } catch (err) {
-          console.warn("[Partner Memos Today] Realtime sync error:", err);
-        }
-      }, (err) => {
-        console.warn("[Partner Memos Today] Subscription notice:", err);
-      });
-  }
-
-  let partnerPublicProfileUnsubscribe = null;
-
-  function startPartnerPublicProfileListener(partnerId) {
-    if (partnerPublicProfileUnsubscribe) partnerPublicProfileUnsubscribe();
-    if (!partnerId || partnerId === 'user_a' || partnerId === 'user_b' || !window.db) return;
-
-    console.log("[Partner Profile Sync] Subscribing to publicProfile for partner:", partnerId);
-    partnerPublicProfileUnsubscribe = window.db.collection('users').doc(partnerId)
-      .collection('publicProfile').doc('info')
-      .onSnapshot(async (doc) => {
-        let partnerName = '筆友';
-        if (doc.exists) {
-          const data = doc.data();
-          if (data && data.displayName && data.displayName.trim()) {
-            partnerName = data.displayName.trim();
-          }
-        }
-        console.log("[Partner Profile Sync] Realtime partner displayName update received:", partnerName);
-        
-        await DiaryDB.saveUser({
-          id: partnerId,
-          displayName: partnerName,
-          updatedAt: new Date().toISOString()
-        });
-
-        if (window.updatePartnerDisplayNamesInUI) {
-          window.updatePartnerDisplayNamesInUI(partnerName);
-        }
-      }, (err) => {
-        console.warn("[Partner Profile Sync] Public profile listener notice:", err);
-        if (window.updatePartnerDisplayNamesInUI) {
-          window.updatePartnerDisplayNamesInUI('筆友');
-        }
-      });
-  }
 
   let archivesUnsubscribe = null;
 
@@ -1038,108 +984,251 @@
       });
   }
 
-  function stopPartnerDataListeners() {
-    if (partnerDiariesUnsubscribe) { partnerDiariesUnsubscribe(); partnerDiariesUnsubscribe = null; }
-    if (partnerMemosUnsubscribe) { partnerMemosUnsubscribe(); partnerMemosUnsubscribe = null; }
-    if (partnerPublicProfileUnsubscribe) { partnerPublicProfileUnsubscribe(); partnerPublicProfileUnsubscribe = null; }
+  // 容量限制門檻（優先採用 window 定義之全局常數，若未定義則採用標準常數）
+  const MEMO_DAILY_SAFE_LIMIT_BYTES = (typeof window !== 'undefined' && window.MEMO_DAILY_SAFE_LIMIT_BYTES) || 870400; // 850 KiB
+  const FIRESTORE_DOC_MAX_BYTES = (typeof window !== 'undefined' && window.FIRESTORE_DOC_MAX_BYTES) || 1048576; // 1 MiB
+
+  /**
+   * 計算並預估 Firestore 隨筆整日文件之 UTF-8 序列化位元組大小
+   * 優先複用 app.js 已載入之 window.estimateMemoDocumentBytes，確保前後端估算規則 100% 一致。
+   * 若處於獨立測試環境 (app.js 尚未掛載)，則採用完全一致之 UTF-8 編碼與封裝規則計算。
+   */
+  function estimateDocumentPayloadBytes(dateStr, memoItems) {
+    if (typeof window !== 'undefined' && typeof window.estimateMemoDocumentBytes === 'function') {
+      return window.estimateMemoDocumentBytes(dateStr, memoItems);
+    }
+    const safeItems = Array.isArray(memoItems) ? memoItems.map(m => ({
+      id: m && m.id !== undefined ? m.id : 0,
+      date: (m && m.date) || dateStr || '',
+      time: (m && m.time) || '00:00',
+      content: (m && m.content) || '',
+      images: (m && Array.isArray(m.images)) ? m.images : []
+    })) : [];
+
+    const dummyPayload = {
+      date: dateStr || '',
+      items: safeItems,
+      updatedAt: new Date().toISOString()
+    };
+
+    const jsonStr = JSON.stringify(dummyPayload);
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(jsonStr).length;
+    }
+    return unescape(encodeURIComponent(jsonStr)).length;
+  }
+  if (typeof window !== 'undefined') {
+    window.estimateDocumentPayloadBytes = estimateDocumentPayloadBytes;
+  }
+
+  // Ensure helper methods on window.SyncManager
+  if (window.SyncManager) {
+    if (!window.SyncManager.getFailedTasks) {
+      window.SyncManager.getFailedTasks = function() {
+        try {
+          return JSON.parse(localStorage.getItem('failed_sync_tasks') || '[]');
+        } catch (_) {
+          return [];
+        }
+      };
+    }
+    if (!window.SyncManager.saveFailedTasks) {
+      window.SyncManager.saveFailedTasks = function(tasks) {
+        localStorage.setItem('failed_sync_tasks', JSON.stringify(tasks));
+      };
+    }
+    if (!window.SyncManager.clearFailedTasks) {
+      window.SyncManager.clearFailedTasks = function() {
+        localStorage.removeItem('failed_sync_tasks');
+        this.updateStatusUI();
+      };
+    }
   }
 
   // Override SyncManager queue loop to upload to Firestore
   const originalProcessQueue = window.SyncManager.processQueue;
   window.SyncManager.processQueue = async function() {
-    if (!navigator.onLine || !window.auth.currentUser) {
-      window.SyncManager.updateStatusUI();
+    if (this._isProcessing) {
+      console.log('[Firebase SyncManager] Queue processing already in progress. Skipping concurrent run.');
       return;
     }
-    const uid = window.auth.currentUser.uid;
-    let queue = this.getQueue();
-    if (queue.length === 0) {
+    if (!navigator.onLine || !window.auth || !window.auth.currentUser) {
       this.updateStatusUI();
       return;
     }
-    console.log(`[Firebase SyncManager] Syncing ${queue.length} items to Firestore...`);
-    while (queue.length > 0) {
-      const item = queue[0];
-      try {
-        if (item.action === 'save_diary') {
-          if (item.data && item.data.date && item.data.content) {
-            await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).set({
-              date: item.data.date,
-              content: item.data.content,
-              mood: item.data.mood || 'none',
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-          }
-        } else if (item.action === 'delete_diary') {
-          const isValidIntent = item.data && item.data.source === 'user_action' && item.data.confirmed === true;
-          if (isValidIntent && item.data.date) {
-            console.log(`[Firebase SyncManager] VALIDATION PASSED: Executing Firestore delete for date: ${item.data.date}`);
-            try {
-              await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
-              console.log(`[Firebase SyncManager] CLOUD DELETE SUCCESS for date: ${item.data.date}`);
-            } catch (delErr) {
-              console.error(`[Firebase SyncManager] CLOUD DELETE FAILURE for date: ${item.data.date}`, delErr);
-              throw delErr;
+    this._isProcessing = true;
+    try {
+      const uid = window.auth.currentUser.uid;
+      let queue = this.getQueue();
+      if (queue.length === 0) {
+        this.updateStatusUI();
+        return;
+      }
+      console.log(`[Firebase SyncManager] Syncing ${queue.length} items to Firestore...`);
+      const MAX_RETRIES = 5;
+
+      while (queue.length > 0) {
+        const item = queue[0];
+        try {
+          if (item.action === 'save_diary') {
+            if (item.data && item.data.date && item.data.content) {
+              await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).set({
+                date: item.data.date,
+                content: item.data.content,
+                mood: item.data.mood || 'none',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              }, { merge: true });
             }
+          } else if (item.action === 'delete_diary') {
+            const isValidIntent = item.data && item.data.source === 'user_action' && item.data.confirmed === true;
+            if (isValidIntent && item.data.date) {
+              console.log(`[Firebase SyncManager] VALIDATION PASSED: Executing Firestore delete for date: ${item.data.date}`);
+              try {
+                await window.db.collection('users').doc(uid).collection('diaries').doc(item.data.date).delete();
+                console.log(`[Firebase SyncManager] CLOUD DELETE SUCCESS for date: ${item.data.date}`);
+              } catch (delErr) {
+                console.error(`[Firebase SyncManager] CLOUD DELETE FAILURE for date: ${item.data.date}`, delErr);
+                throw delErr;
+              }
+            } else {
+              console.warn('[Firebase SyncManager] DISCARDING unconfirmed delete_diary task without touching Cloud Firestore:', item);
+            }
+          } else if (item.action === 'save_memo' || item.action === 'delete_memo') {
+            if (item.data && item.data.date) {
+              const date = item.data.date;
+              const allMemos = await DiaryDB.getMemosForDate(date, uid);
+              const memoItems = allMemos.map(m => ({
+                id: m.id,
+                date: m.date,
+                time: m.time || '00:00',
+                content: m.content || '',
+                images: m.images || []
+              }));
+              const payload = {
+                date: date,
+                items: memoItems,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              };
+
+              // Firestore 同步層最後防線：完整文件 UTF-8 預估大小檢查 (硬上限 1 MiB / 1,048,576 bytes)
+              // 檢查對象為完整 payload { date, items, updatedAt } 之 UTF-8 序列化位元組數 (非 UTF-16 code units)
+              // 備註：此處以 JSON 格式之 UTF-8 編碼位元組數進行保守估算，非 Protobuf 實體大小
+              const payloadBytes = estimateDocumentPayloadBytes(date, memoItems);
+              if (payloadBytes > FIRESTORE_DOC_MAX_BYTES) {
+                console.error(`[Firebase SyncManager] 隨筆文件預估 UTF-8 大小超出 1 MiB 限制 (~${payloadBytes} bytes > ${FIRESTORE_DOC_MAX_BYTES} bytes)，已中止寫入以防 Firestore 拋錯。`, item);
+                if (window.showToast) {
+                  window.showToast('隨筆資料超出雲端文件上限 (1 MiB)，請縮減照片尺寸或數量。', 'error');
+                }
+                const sizeErr = new Error(`[FirestorePayloadSizeLimit] Payload estimated UTF-8 size ~${payloadBytes} bytes exceeds 1,048,576 byte document limit.`);
+                sizeErr.name = 'FirestorePayloadSizeLimit';
+                sizeErr.isPermanent = true;
+                throw sizeErr;
+              }
+
+              await window.db.collection('users').doc(uid).collection('memos').doc(date).set(payload);
+            }
+          } else if (item.action === 'save_archive') {
+            if (item.data && item.data.id) {
+              await window.db.collection('users').doc(uid).collection('archives').doc(item.data.id).set({
+                id: item.data.id,
+                name: item.data.name,
+                dateRange: item.data.dateRange,
+                cycleStartYear: item.data.cycleStartYear,
+                cycleEndYear: item.data.cycleEndYear,
+                startYear: item.data.cycleStartYear,
+                endYear: item.data.cycleEndYear,
+                archivedAt: item.data.archivedAt,
+                diaries: item.data.diaries,
+                memos: item.data.memos,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              }, { merge: true });
+            }
+          } else if (item.action === 'update_active_cycle') {
+            if (item.data && item.data.activeCycleStartYear) {
+              await window.db.collection('users').doc(uid).set({
+                activeCycleStartYear: item.data.activeCycleStartYear,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              }, { merge: true });
+            }
+          }
+
+          // 成功完成任務：從主佇列中移除該任務
+          queue.shift();
+          this.saveQueue(queue);
+          this.updateStatusUI();
+
+        } catch (err) {
+          const isPayloadLimit = !!(err && (err.name === 'FirestorePayloadSizeLimit' || (err.message && err.message.includes('[FirestorePayloadSizeLimit]'))));
+          const isExplicitPermanent = !!(err && err.isPermanent === true);
+          const isPermanent = isPayloadLimit || isExplicitPermanent;
+          const currentRetries = (item.retryCount || 0) + 1;
+
+          if (isPermanent || currentRetries >= MAX_RETRIES) {
+            // 永久性錯誤 或 超出重試上限：移入失敗隔離區 (failed_sync_tasks)
+            const reason = isPayloadLimit
+              ? 'PAYLOAD_TOO_LARGE'
+              : (currentRetries >= MAX_RETRIES ? 'MAX_RETRIES_EXCEEDED' : 'PERMANENT_ERROR');
+
+            console.error(`[Firebase SyncManager] Permanent failure (${reason}) on task ${item.action}, moving to failed_sync_tasks:`, err, item);
+
+            const failedEntry = {
+              task: { ...item, retryCount: currentRetries },
+              error: err ? (err.message || String(err)) : 'Unknown error',
+              errorType: reason,
+              failedAt: new Date().toISOString()
+            };
+
+            const failedTasks = this.getFailedTasks ? this.getFailedTasks() : (JSON.parse(localStorage.getItem('failed_sync_tasks') || '[]'));
+            failedTasks.push(failedEntry);
+            if (this.saveFailedTasks) {
+              this.saveFailedTasks(failedTasks);
+            } else {
+              localStorage.setItem('failed_sync_tasks', JSON.stringify(failedTasks));
+            }
+
+            // 從主佇列移除，確保不阻擋後續其他正常佇列任務
+            queue.shift();
+            this.saveQueue(queue);
+            this.updateStatusUI();
+            // 繼續處理下一個任務
+            continue;
           } else {
-            console.warn('[Firebase SyncManager] DISCARDING unconfirmed delete_diary task without touching Cloud Firestore:', item);
-          }
-        } else if (item.action === 'save_memo' || item.action === 'delete_memo') {
-          if (item.data && item.data.date) {
-            const date = item.data.date;
-            const allMemos = await DiaryDB.getMemosForDate(date, uid);
-            const memoItems = allMemos.map(m => ({
-              id: m.id,
-              date: m.date,
-              time: m.time || '00:00',
-              content: m.content || '',
-              images: m.images || []
-            }));
-            await window.db.collection('users').doc(uid).collection('memos').doc(date).set({
-              date: date,
-              items: memoItems,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-          }
-        } else if (item.action === 'save_archive') {
-          if (item.data && item.data.id) {
-            await window.db.collection('users').doc(uid).collection('archives').doc(item.data.id).set({
-              id: item.data.id,
-              name: item.data.name,
-              dateRange: item.data.dateRange,
-              cycleStartYear: item.data.cycleStartYear,
-              cycleEndYear: item.data.cycleEndYear,
-              startYear: item.data.cycleStartYear,
-              endYear: item.data.cycleEndYear,
-              archivedAt: item.data.archivedAt,
-              diaries: item.data.diaries,
-              memos: item.data.memos,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-          }
-        } else if (item.action === 'update_active_cycle') {
-          if (item.data && item.data.activeCycleStartYear) {
-            await window.db.collection('users').doc(uid).set({
-              activeCycleStartYear: item.data.activeCycleStartYear,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            // 暫時性錯誤：保留任務在佇列中，累計重試次數與記錄時間戳記
+            item.retryCount = currentRetries;
+            item.lastAttempt = Date.now();
+            item.lastError = err ? (err.message || String(err)) : 'Transient network error';
+
+            this.saveQueue(queue);
+            this.updateStatusUI();
+
+            // 指數退避延遲 (1s, 2s, 4s, 8s, 16s... 最大 30s)
+            const delay = Math.min(1000 * Math.pow(2, currentRetries - 1), 30000);
+            console.warn(`[Firebase SyncManager] Transient error on task ${item.action} (attempt ${currentRetries}/${MAX_RETRIES}). Backing off ${delay}ms:`, err);
+
+            if (this._retryTimeout) {
+              clearTimeout(this._retryTimeout);
+            }
+            this._retryTimeout = setTimeout(() => {
+              if (navigator.onLine && window.auth && window.auth.currentUser) {
+                this.processQueue();
+              }
+            }, delay);
+
+            // 中斷當前同步迴圈，避免緊密無窮重試迴圈
+            break;
           }
         }
-        queue.shift();
-        this.saveQueue(queue);
-        this.updateStatusUI();
-      } catch (err) {
-        console.error('[Firebase SyncManager] Sync item failed, discarding corrupted item to unblock queue:', err, item);
-        queue.shift();
-        this.saveQueue(queue);
-        this.updateStatusUI();
       }
+    } finally {
+      this._isProcessing = false;
     }
   };
 
   // Ensure owner's local today's Diary and Memos are flushed and verified in Cloud Firestore BEFORE creating PIN
   async function ensurePreInviteCloudSync(uid) {
-    if (!uid || !window.db) return;
+    if (!uid || !window.db) {
+      throw new Error('[PARTNER INVITE] 無法執行邀請前同步：缺少 uid 或資料庫連線實例。');
+    }
     console.log("[PARTNER INVITE] Pre-invite cloud sync START for uid:", uid);
 
     // 1. Process any pending queue items first
@@ -1169,7 +1258,27 @@
       content: m.content || '',
       images: m.images || []
     }));
-    console.log(`[PARTNER INVITE] Syncing today's local Memos (${memoItems.length} items) to Cloud Firestore...`);
+
+    // 容量與安全檢查：應用層安全門檻 (850 KiB) 與同步層實體硬上限 (1 MiB)
+    const payloadBytes = estimateDocumentPayloadBytes(TODAY_DATE_STR, memoItems);
+
+    if (payloadBytes > MEMO_DAILY_SAFE_LIMIT_BYTES) {
+      console.error(`[PARTNER INVITE] 今日隨筆預估 UTF-8 容量 (~${payloadBytes} bytes) 超出應用層安全上限 (${MEMO_DAILY_SAFE_LIMIT_BYTES} bytes)，中止寫入以確保資料安全。`);
+      const limitErr = new Error(`今日隨筆資料量過大 (~${Math.round(payloadBytes / 1024)} KB)，已超出邀請前同步安全上限 (850 KB)，請先調整照片或內容。`);
+      limitErr.name = 'MemoCapacityLimitExceeded';
+      limitErr.payloadBytes = payloadBytes;
+      throw limitErr;
+    }
+
+    if (payloadBytes > FIRESTORE_DOC_MAX_BYTES) {
+      console.error(`[PARTNER INVITE] 今日隨筆預估 UTF-8 容量 (~${payloadBytes} bytes) 超出 Firestore 1 MiB 實體上限，中止寫入。`);
+      const limitErr = new Error(`今日隨筆資料量過大，超出 Firestore 1 MiB 限制。`);
+      limitErr.name = 'FirestorePayloadSizeLimit';
+      limitErr.payloadBytes = payloadBytes;
+      throw limitErr;
+    }
+
+    console.log(`[PARTNER INVITE] Syncing today's local Memos (${memoItems.length} items, ~${payloadBytes} bytes) to Cloud Firestore...`);
     await window.db.collection('users').doc(uid).collection('memos').doc(TODAY_DATE_STR).set({
       date: TODAY_DATE_STR,
       items: memoItems,
@@ -1187,6 +1296,10 @@
 
     console.log("[PARTNER INVITE] Pre-invite cloud sync SUCCESS");
     return true;
+  }
+  if (typeof window !== 'undefined') {
+    window.ensurePreInviteCloudSync = ensurePreInviteCloudSync;
+    window.ensureSyncBeforeInvite = ensurePreInviteCloudSync;
   }
 
   // Override PartnerService Invite Flow and Linkage Logic
@@ -1259,7 +1372,10 @@
         await ensurePreInviteCloudSync(realAuthUid);
       } catch (syncErr) {
         console.error('[PARTNER INVITE] Pre-invite cloud sync FAILED:', syncErr);
-        alert('產生邀請碼失敗：無法將今日資料同步至雲端，請檢查網路連線後重試。');
+        const errorMsg = (syncErr && (syncErr.name === 'MemoCapacityLimitExceeded' || syncErr.name === 'FirestorePayloadSizeLimit'))
+          ? `產生邀請碼失敗：${syncErr.message}`
+          : '產生邀請碼失敗：無法將今日資料同步至雲端，請檢查網路連線後重試。';
+        alert(errorMsg);
         throw syncErr;
       }
 

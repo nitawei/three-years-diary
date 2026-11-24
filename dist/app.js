@@ -58,6 +58,20 @@ const SyncManager = {
   saveQueue(queue) {
     localStorage.setItem('sync_retry_queue', JSON.stringify(queue));
   },
+  getFailedTasks() {
+    try {
+      return JSON.parse(localStorage.getItem('failed_sync_tasks') || '[]');
+    } catch (_) {
+      return [];
+    }
+  },
+  saveFailedTasks(tasks) {
+    localStorage.setItem('failed_sync_tasks', JSON.stringify(tasks));
+  },
+  clearFailedTasks() {
+    localStorage.removeItem('failed_sync_tasks');
+    this.updateStatusUI();
+  },
   addToQueue(action, data) {
     // INTENT VALIDATION: Destructive delete_diary actions MUST require explicit user action intent
     if (action === 'delete_diary') {
@@ -83,43 +97,58 @@ const SyncManager = {
     const indicator = document.getElementById('sync-status-indicator');
     if (!indicator) return;
     const queue = this.getQueue();
+    const failedTasks = this.getFailedTasks();
     if (!navigator.onLine) {
       indicator.textContent = '離線中';
       indicator.style.backgroundColor = 'rgba(92, 92, 94, 0.15)';
       indicator.style.color = 'var(--color-mood-black)';
+      indicator.title = '目前處於離線狀態';
+    } else if (failedTasks.length > 0) {
+      indicator.textContent = `同步異常 (${failedTasks.length})`;
+      indicator.style.backgroundColor = 'rgba(231, 111, 81, 0.15)';
+      indicator.style.color = 'var(--color-mood-red)';
+      indicator.title = `有 ${failedTasks.length} 個同步項目失敗，請檢查網路或隨筆照片大小`;
     } else if (queue.length > 0) {
       indicator.textContent = `待同步 (${queue.length})`;
       indicator.style.backgroundColor = 'rgba(233, 196, 106, 0.15)';
       indicator.style.color = 'var(--color-mood-yellow)';
+      indicator.title = `尚有 ${queue.length} 個項目待同步`;
     } else {
       indicator.textContent = '已同步';
       indicator.style.backgroundColor = 'rgba(138, 154, 134, 0.15)';
       indicator.style.color = 'var(--color-mood-green)';
+      indicator.title = '所有資料已同步至雲端';
     }
   },
   async processQueue() {
+    if (this._isProcessing) return;
     if (!navigator.onLine) {
       this.updateStatusUI();
       return;
     }
-    let queue = this.getQueue();
-    if (queue.length === 0) {
-      this.updateStatusUI();
-      return;
-    }
-    console.log(`[SyncManager] Processing ${queue.length} queued sync tasks...`);
-    while (queue.length > 0) {
-      const item = queue[0];
-      try {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        console.log(`[SyncManager] Synced item: ${item.action}`, item.data);
-        queue.shift();
-        this.saveQueue(queue);
+    this._isProcessing = true;
+    try {
+      let queue = this.getQueue();
+      if (queue.length === 0) {
         this.updateStatusUI();
-      } catch (err) {
-        console.error('[SyncManager] Sync failed:', err);
-        break;
+        return;
       }
+      console.log(`[SyncManager] Processing ${queue.length} queued sync tasks...`);
+      while (queue.length > 0) {
+        const item = queue[0];
+        try {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          console.log(`[SyncManager] Synced item: ${item.action}`, item.data);
+          queue.shift();
+          this.saveQueue(queue);
+          this.updateStatusUI();
+        } catch (err) {
+          console.error('[SyncManager] Sync failed:', err);
+          break;
+        }
+      }
+    } finally {
+      this._isProcessing = false;
     }
   }
 };
@@ -881,6 +910,163 @@ function removeManuscriptCursor() {
   });
 }
 
+// ==================== 稿紙游標計算與跳格定位 (Shared Caret Positioning) ====================
+
+/**
+ * 計算稿紙網格座標與目標 Grapheme/UTF-16 游標位置 (Pure Calculation)
+ * @param {DOMRect|Object} rect 網格邊界 (grid.getBoundingClientRect())
+ * @param {number} clientX 點擊 X 座標
+ * @param {number} clientY 點擊 Y 座標
+ * @param {string} text 當前輸入框文字
+ * @returns {{ col: number, row: number, targetIdx: number, newPos: number }}
+ */
+function calculateManuscriptCaretPosition(rect, clientX, clientY, text = '') {
+  if (!rect || !rect.width || !rect.height) {
+    return { col: 0, row: 0, targetIdx: 0, newPos: 0 };
+  }
+
+  const relX = clientX - rect.left;
+  const relY = clientY - rect.top;
+
+  // Strict Coordinate Clamping (col: 0..9, row: 0..4, targetIdx: 0..49)
+  const col = Math.min(Math.max(Math.floor((relX / rect.width) * 10), 0), 9);
+  const row = Math.min(Math.max(Math.floor((relY / rect.height) * 5), 0), 4);
+  const targetIdx = Math.min(Math.max(row * 10 + col, 0), 49);
+
+  const rawText = text || '';
+  const graphemes = getGraphemes(rawText);
+  let newPos = 0;
+  if (targetIdx >= graphemes.length) {
+    newPos = rawText.length;
+  } else {
+    newPos = graphemes.slice(0, targetIdx).join('').length;
+  }
+
+  return { col, row, targetIdx, newPos };
+}
+
+/**
+ * 稿紙觸控與點擊精確跳格定位 (Shared Mobile Touch & Click Caret Positioning)
+ * @param {Object} options
+ * @param {HTMLElement} options.grid 網格元素 (#manuscript-grid 或 #edit-manuscript-grid)
+ * @param {HTMLTextAreaElement} options.textarea 輸入框元素
+ * @param {number} options.clientX 點擊 X 座標
+ * @param {number} options.clientY 點擊 Y 座標
+ * @param {boolean} [options.isComposing=false] 是否處於注音/拼音組字中
+ * @param {Function} [options.highlightCursor] 游標高亮更新回呼
+ * @returns {{ targetIdx: number, newPos: number }|null}
+ */
+function applyManuscriptCaretPositioning({ grid, textarea, clientX, clientY, isComposing = false, highlightCursor }) {
+  if (isComposing || !grid || !textarea) return null;
+
+  const rect = grid.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+
+  const { targetIdx, newPos } = calculateManuscriptCaretPosition(rect, clientX, clientY, textarea.value || '');
+
+  textarea.focus();
+  if (typeof textarea.setSelectionRange === 'function') {
+    textarea.setSelectionRange(newPos, newPos);
+  }
+
+  if (typeof highlightCursor === 'function') {
+    highlightCursor();
+  }
+
+  // Active Cell Micro-Feedback (Pencil Press Touch Feedback with Timer Cleanup)
+  if (grid._activeFeedbackTimer) {
+    clearTimeout(grid._activeFeedbackTimer);
+    grid._activeFeedbackTimer = null;
+  }
+  grid.querySelectorAll('.manuscript-cell.is-active').forEach(c => c.classList.remove('is-active'));
+
+  const targetCell = grid.querySelector(`.manuscript-cell[data-index="${targetIdx}"]`);
+  if (targetCell) {
+    targetCell.classList.add('is-active');
+    grid._activeFeedbackTimer = setTimeout(() => {
+      targetCell.classList.remove('is-active');
+      grid._activeFeedbackTimer = null;
+    }, 150);
+  }
+
+  return { targetIdx, newPos };
+}
+
+/**
+ * 稿紙觸控、點擊與防原生覆蓋游標事件綁定 (Shared Caret Event Binding with Native Override Prevention)
+ * @param {Object} options
+ * @param {HTMLElement} options.grid 網格元素 (#manuscript-grid 或 #edit-manuscript-grid)
+ * @param {HTMLTextAreaElement} options.textarea 輸入框元素
+ * @param {Function} options.getIsComposing 取得是否注音/拼音組字中回呼
+ * @param {Function} options.highlightCursor 游標高亮回呼
+ */
+function bindManuscriptCaretEvents({ grid, textarea, getIsComposing, highlightCursor }) {
+  if (!grid || !textarea) return;
+
+  let lastPositionedTime = 0;
+
+  const handlePositioning = (clientX, clientY) => {
+    const isComposing = typeof getIsComposing === 'function' ? getIsComposing() : false;
+    if (isComposing) return;
+    lastPositionedTime = Date.now();
+    applyManuscriptCaretPositioning({
+      grid,
+      textarea,
+      clientX,
+      clientY,
+      isComposing,
+      highlightCursor
+    });
+  };
+
+  // 1. PointerDown: 即時反應 (0ms 延遲，支援觸控、觸控筆、滑鼠與各類測試事件)
+  // 不對 pointerdown 呼叫 preventDefault()，確保 iOS Safari 與 Android 能正常彈出原生虛擬鍵盤。
+  const handlePointerDown = (e) => {
+    handlePositioning(e.clientX, e.clientY);
+  };
+
+  // 2. Desktop Mouse: 攔截 mousedown 並執行 e.preventDefault()
+  // 徹底阻止桌面瀏覽器原生 textarea 在隱藏排版文字上進行滑鼠命中測試與選取拖曳，
+  // 避免 mouseup 時派發原生 selectionchange 竄改自訂的九宮格游標位置。
+  // 若 pointerdown 剛完成定位 (300ms 內)，則僅執行 preventDefault() 防止原生覆蓋，避免重複計算；
+  // 若環境未派發 pointerdown，則執行完整定位。
+  const handleMouseDown = (e) => {
+    if (e.button && e.button !== 0) return; // 僅攔截滑鼠主鍵
+    if (typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    if (Date.now() - lastPositionedTime < 300) {
+      return;
+    }
+    handlePositioning(e.clientX, e.clientY);
+  };
+
+  // 3. Click Fallback / De-duplication:
+  // 桌面與觸控環境在 pointerdown / mousedown 後均會接續派發 click。
+  // 若 300ms 內已完成定位，略過重複運算與二次動畫；
+  // 若為自動化測試或未觸發 pointerdown 的環境，則作為備援進行定位。
+  const handleClick = (e) => {
+    if (Date.now() - lastPositionedTime < 300) {
+      return;
+    }
+    handlePositioning(e.clientX, e.clientY);
+  };
+
+  textarea.addEventListener('mousedown', handleMouseDown);
+  textarea.addEventListener('pointerdown', handlePointerDown);
+  textarea.addEventListener('click', handleClick);
+
+  grid.addEventListener('mousedown', handleMouseDown);
+  grid.addEventListener('pointerdown', handlePointerDown);
+  grid.addEventListener('click', handleClick);
+}
+
+if (typeof window !== 'undefined') {
+  window.calculateManuscriptCaretPosition = calculateManuscriptCaretPosition;
+  window.applyManuscriptCaretPositioning = applyManuscriptCaretPositioning;
+  window.bindManuscriptCaretEvents = bindManuscriptCaretEvents;
+}
+
 // 渲染交換日記的 10x5 實線格子 (唯讀)
 function renderPartnerManuscriptGrid(content, mood = 'black') {
   const grid = document.getElementById('partner-manuscript-grid');
@@ -1118,34 +1304,43 @@ async function loadTodayData() {
                 imgGrid.className = 'timeline-images-grid';
                 
                 memo.images.forEach(imgData => {
-                  const wrapper = document.createElement('div');
-                  wrapper.className = 'timeline-image-wrapper';
-                  
-                  const { original, hasCrop, crop } = parseMemoImageData(imgData);
-                  const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-                  
-                  const img = document.createElement('img');
-                  img.src = safeSrc;
-                  img.loading = 'lazy'; // Lazy-load images
-                  img.alt = '筆友隨筆圖片';
+                  try {
+                    const { original, hasCrop, crop } = parseMemoImageData(imgData);
+                    if (!original) return;
+                    const safeSrc = isSafeImageUri(original) ? original : '';
+                    if (!safeSrc) return;
 
-                  if (hasCrop && crop) {
-                    const px = crop.xPercent !== undefined ? crop.xPercent : 50;
-                    const py = crop.yPercent !== undefined ? crop.yPercent : 50;
-                    const sc = crop.scale !== undefined ? crop.scale : 1;
-                    img.style.objectPosition = `${px}% ${py}%`;
-                    if (sc > 1.001) {
-                      img.style.transform = `scale(${sc})`;
-                      img.style.transformOrigin = `${px}% ${py}%`;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'timeline-image-wrapper';
+                    
+                    const img = document.createElement('img');
+                    img.src = safeSrc;
+                    img.loading = 'lazy'; // Lazy-load images
+                    img.alt = '筆友隨筆圖片';
+                    img.onerror = () => {
+                      wrapper.style.display = 'none';
+                    };
+
+                    if (hasCrop && crop) {
+                      const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+                      const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+                      const sc = crop.scale !== undefined ? crop.scale : 1;
+                      img.style.objectPosition = `${px}% ${py}%`;
+                      if (sc > 1.001) {
+                        img.style.transform = `scale(${sc})`;
+                        img.style.transformOrigin = `${px}% ${py}%`;
+                      }
                     }
-                  }
 
-                  img.addEventListener('click', () => {
-                    openPhotoViewer(safeSrc);
-                  });
-                  
-                  wrapper.appendChild(img);
-                  imgGrid.appendChild(wrapper);
+                    img.addEventListener('click', () => {
+                      openPhotoViewer(safeSrc);
+                    });
+                    
+                    wrapper.appendChild(img);
+                    imgGrid.appendChild(wrapper);
+                  } catch (imgErr) {
+                    console.warn('[Partner Memo] Failed to render image:', imgErr);
+                  }
                 });
                 body.appendChild(imgGrid);
               }
@@ -1201,6 +1396,9 @@ async function renderMemoTimeline() {
     }
   });
 
+  // 更新每日隨筆容量狀態
+  updateDailyMemoCapacityUI();
+
   timelineList.innerHTML = '';
 
   if (memos.length === 0) {
@@ -1234,34 +1432,43 @@ async function renderMemoTimeline() {
       imgGrid.className = 'timeline-images-grid';
       
       memo.images.forEach(imgData => {
-        const imgWrapper = document.createElement('div');
-        imgWrapper.className = 'timeline-image-wrapper';
-        
-        const { original, hasCrop, crop } = parseMemoImageData(imgData);
-        const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        try {
+          const { original, hasCrop, crop } = parseMemoImageData(imgData);
+          if (!original) return;
+          const safeSrc = isSafeImageUri(original) ? original : '';
+          if (!safeSrc) return;
 
-        const img = document.createElement('img');
-        img.src = safeSrc;
-        img.loading = 'lazy'; // Lazy-load images
-        img.alt = '時光隨筆圖片';
+          const imgWrapper = document.createElement('div');
+          imgWrapper.className = 'timeline-image-wrapper';
+          
+          const img = document.createElement('img');
+          img.src = safeSrc;
+          img.loading = 'lazy'; // Lazy-load images
+          img.alt = '時光隨筆圖片';
+          img.onerror = () => {
+            imgWrapper.style.display = 'none';
+          };
 
-        if (hasCrop && crop) {
-          const px = crop.xPercent !== undefined ? crop.xPercent : 50;
-          const py = crop.yPercent !== undefined ? crop.yPercent : 50;
-          const sc = crop.scale !== undefined ? crop.scale : 1;
-          img.style.objectPosition = `${px}% ${py}%`;
-          if (sc > 1.001) {
-            img.style.transform = `scale(${sc})`;
-            img.style.transformOrigin = `${px}% ${py}%`;
+          if (hasCrop && crop) {
+            const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+            const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+            const sc = crop.scale !== undefined ? crop.scale : 1;
+            img.style.objectPosition = `${px}% ${py}%`;
+            if (sc > 1.001) {
+              img.style.transform = `scale(${sc})`;
+              img.style.transformOrigin = `${px}% ${py}%`;
+            }
           }
+
+          img.addEventListener('click', () => {
+            openPhotoViewer(safeSrc);
+          });
+
+          imgWrapper.appendChild(img);
+          imgGrid.appendChild(imgWrapper);
+        } catch (imgErr) {
+          console.warn('[Memo Timeline] Failed to render image:', imgErr);
         }
-
-        img.addEventListener('click', () => {
-          openPhotoViewer(safeSrc);
-        });
-
-        imgWrapper.appendChild(img);
-        imgGrid.appendChild(imgWrapper);
       });
       
       body.appendChild(imgGrid);
@@ -1303,98 +1510,48 @@ function setupEventListeners() {
   const textarea = document.getElementById('diary-textarea');
   const grid = document.getElementById('manuscript-grid');
   let isComposing = false; // Local closure state for IME safety
-  let activeFeedbackTimer = null; // Local closure state to prevent timer accumulation
 
-  // 點擊網格聚焦輸入框
-  if (grid && textarea) {
-    grid.addEventListener('click', () => {
-      textarea.focus();
-    });
-  }
+  // 稿紙觸控與點擊精確跳格定位 (Mobile Touch & Click Caret Positioning with Native Override Prevention)
+  bindManuscriptCaretEvents({
+    grid,
+    textarea,
+    getIsComposing: () => isComposing,
+    highlightCursor: highlightManuscriptCursor
+  });
 
   // 文字輸入同步與字數統計
   if (textarea) {
-    // IME Composition Event Safety
+    const syncDiaryInputState = (targetTextarea) => {
+      const rawText = targetTextarea.value || '';
+      const graphemes = getGraphemes(rawText);
+      let text = rawText;
+      if (graphemes.length > 50) {
+        text = graphemes.slice(0, 50).join('');
+        targetTextarea.value = text;
+      }
+      State.diaryWordCount = Math.min(graphemes.length, 50);
+      const wordCountEl = document.getElementById('diary-word-count');
+      if (wordCountEl) {
+        wordCountEl.textContent = `${State.diaryWordCount} / 50`;
+      }
+      updateManuscriptCells(text);
+      highlightManuscriptCursor();
+      localStorage.setItem(`draft_diary_${State.currentUser}_${State.activeDate}`, text);
+    };
+
+    // IME Composition Event Safety (iPhone 注音等輸入法組字保護)
     textarea.addEventListener('compositionstart', () => {
       isComposing = true;
     });
 
     textarea.addEventListener('compositionend', () => {
       isComposing = false;
-      highlightManuscriptCursor();
-    });
-
-    // 稿紙觸控與點擊精確跳格定位 (Mobile Touch & Click Caret Positioning)
-    const handleCaretPositioning = (clientX, clientY) => {
-      if (isComposing || !grid) return;
-
-      // Coordinate calculation MUST use #manuscript-grid.getBoundingClientRect()
-      const rect = grid.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-
-      const relX = clientX - rect.left;
-      const relY = clientY - rect.top;
-
-      // Strict Coordinate Clamping (col: 0..9, row: 0..4, targetIdx: 0..49)
-      const col = Math.min(Math.max(Math.floor((relX / rect.width) * 10), 0), 9);
-      const row = Math.min(Math.max(Math.floor((relY / rect.height) * 5), 0), 4);
-      const targetIdx = Math.min(Math.max(row * 10 + col, 0), 49);
-
-      const text = textarea.value || '';
-      const graphemes = getGraphemes(text);
-      let newPos = 0;
-      if (targetIdx >= graphemes.length) {
-        newPos = text.length;
-      } else {
-        newPos = graphemes.slice(0, targetIdx).join('').length;
-      }
-
-      textarea.focus();
-      if (typeof textarea.setSelectionRange === 'function') {
-        textarea.setSelectionRange(newPos, newPos);
-      }
-      highlightManuscriptCursor();
-
-      // Active Cell Micro-Feedback (Pencil Press Touch Feedback with Timer Cleanup)
-      if (activeFeedbackTimer) {
-        clearTimeout(activeFeedbackTimer);
-        activeFeedbackTimer = null;
-      }
-      document.querySelectorAll('#manuscript-grid .manuscript-cell.is-active').forEach(c => c.classList.remove('is-active'));
-
-      const targetCell = document.querySelector(`#manuscript-grid .manuscript-cell[data-index="${targetIdx}"]`);
-      if (targetCell) {
-        targetCell.classList.add('is-active');
-        activeFeedbackTimer = setTimeout(() => {
-          targetCell.classList.remove('is-active');
-          activeFeedbackTimer = null;
-        }, 150);
-      }
-    };
-
-    // Fast Mobile Touch Reaction (pointerdown)
-    textarea.addEventListener('pointerdown', (e) => {
-      handleCaretPositioning(e.clientX, e.clientY);
-    });
-
-    // Desktop Click Fallback
-    textarea.addEventListener('click', (e) => {
-      handleCaretPositioning(e.clientX, e.clientY);
+      syncDiaryInputState(textarea);
     });
 
     textarea.addEventListener('input', (e) => {
-      const rawText = e.target.value;
-      const graphemes = getGraphemes(rawText);
-      let text = rawText;
-      if (graphemes.length > 50) {
-        text = graphemes.slice(0, 50).join('');
-        e.target.value = text;
-      }
-      State.diaryWordCount = Math.min(graphemes.length, 50);
-      document.getElementById('diary-word-count').textContent = `${State.diaryWordCount} / 50`;
-      updateManuscriptCells(text);
-      highlightManuscriptCursor();
-      localStorage.setItem(`draft_diary_${State.currentUser}_${State.activeDate}`, text);
+      if (isComposing) return;
+      syncDiaryInputState(e.target);
     });
 
     textarea.addEventListener('focus', () => {
@@ -1526,10 +1683,21 @@ function setupEventListeners() {
     cancelMemoBtn.addEventListener('click', exitEditMode);
   }
 
-  // 備忘錄輸入草稿同步
+  // 備忘錄輸入草稿同步 (IME 安全保護)
   const memoTextarea = document.getElementById('memo-textarea');
   if (memoTextarea) {
+    let isMemoComposing = false;
+    memoTextarea.addEventListener('compositionstart', () => {
+      isMemoComposing = true;
+    });
+    memoTextarea.addEventListener('compositionend', (e) => {
+      isMemoComposing = false;
+      if (State.editingMemoId === null) {
+        localStorage.setItem(`draft_memo_text_${State.currentUser}_${State.activeDate}`, e.target.value);
+      }
+    });
     memoTextarea.addEventListener('input', (e) => {
+      if (isMemoComposing) return;
       if (State.editingMemoId === null) {
         localStorage.setItem(`draft_memo_text_${State.currentUser}_${State.activeDate}`, e.target.value);
       }
@@ -1561,6 +1729,8 @@ function setupEventListeners() {
           } catch (_) {}
         }
       }
+      // 開啟隨筆抽屜時更新每日容量狀態
+      updateDailyMemoCapacityUI();
     });
   }
 
@@ -2765,7 +2935,7 @@ function parseMemoImageData(item) {
     return { original: item, hasCrop: false, crop: null };
   }
   if (typeof item === 'object') {
-    const original = item.original || item.url || '';
+    const original = item.original || item.url || item.src || item.data || item.uri || item.base64 || '';
     return { original, hasCrop: Boolean(item.crop), crop: item.crop || null };
   }
   return { original: '', hasCrop: false, crop: null };
@@ -2970,30 +3140,514 @@ window.openCropStep = openCropStep;
 window.updateCropPreview = updateCropPreview;
 window.closeCropModal = closeCropModal;
 
-// ==================== 備忘錄圖片壓縮與預覽 ====================
-function handleImageUpload(e) {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
+// ==================== 隨筆容量引擎常數與計算 ====================
+const MEMO_DAILY_SAFE_LIMIT_BYTES = 870400; // 850 KiB (850 * 1024 bytes) 應用層安全上限
+const FIRESTORE_DOC_MAX_BYTES = 1048576;     // 1 MiB (1024 * 1024 bytes) Cloud Firestore 單一文件實體上限
+const MEMO_IMAGE_MAX_DIMENSION = 1280;       // 圖片最長邊上限 1280px
+const MEMO_IMAGE_PRIMARY_QUALITY = 0.75;     // 初始 JPEG 壓縮品質
+const MEMO_IMAGE_SECONDARY_QUALITY = 0.60;   // 二次 JPEG 壓縮品質
+const MEMO_IMAGE_SECONDARY_THRESHOLD = 280000; // Base64 字串長度大於 280,000 字元時觸發二次壓縮
 
-  const currentCount = State.uploadedImages.length;
-  if (currentCount + files.length > 9) { // 隨筆放寬圖片限制
-    alert('為了保持版面的簡潔，單則備忘錄最多支援上傳 9 張圖片。');
-    e.target.value = '';
-    return;
+window.MEMO_DAILY_SAFE_LIMIT_BYTES = MEMO_DAILY_SAFE_LIMIT_BYTES;
+window.FIRESTORE_DOC_MAX_BYTES = FIRESTORE_DOC_MAX_BYTES;
+window.MEMO_IMAGE_MAX_DIMENSION = MEMO_IMAGE_MAX_DIMENSION;
+window.MEMO_IMAGE_PRIMARY_QUALITY = MEMO_IMAGE_PRIMARY_QUALITY;
+window.MEMO_IMAGE_SECONDARY_QUALITY = MEMO_IMAGE_SECONDARY_QUALITY;
+window.MEMO_IMAGE_SECONDARY_THRESHOLD = MEMO_IMAGE_SECONDARY_THRESHOLD;
+
+/**
+ * 預估 Firestore 隨筆整日文件的 UTF-8 位元組大小
+ * 格式對齊 firebase-sync.js：{ date, items: [...], updatedAt }
+ */
+function estimateMemoDocumentBytes(dateStr, memoItems = []) {
+  const safeItems = Array.isArray(memoItems) ? memoItems.map(m => {
+    const item = {
+      id: m && m.id !== undefined ? m.id : 0,
+      date: (m && m.date) || dateStr || '',
+      time: (m && m.time) || '00:00',
+      content: (m && m.content) || '',
+      images: (m && Array.isArray(m.images)) ? m.images : []
+    };
+    if (m && Array.isArray(m.audios) && m.audios.length > 0) {
+      item.audios = m.audios;
+    }
+    return item;
+  }) : [];
+
+  const dummyPayload = {
+    date: dateStr || '',
+    items: safeItems,
+    updatedAt: new Date().toISOString()
+  };
+
+  const jsonStr = JSON.stringify(dummyPayload);
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(jsonStr).length;
+  }
+  return unescape(encodeURIComponent(jsonStr)).length;
+}
+window.estimateMemoDocumentBytes = estimateMemoDocumentBytes;
+
+/**
+ * 計算指定使用者、指定日期的隨筆容量使用情況與預計儲存大小
+ * 支援 options 物件或位置參數
+ */
+async function getDailyMemoCapacity(optionsOrDate, maybeUserId, maybeEditingMemoId, maybeNewPhotos, maybeNewText, maybeNewAudios) {
+  let opts = {};
+  if (typeof optionsOrDate === 'object' && optionsOrDate !== null) {
+    opts = optionsOrDate;
+  } else {
+    opts = {
+      date: optionsOrDate,
+      userId: maybeUserId,
+      editingMemoId: maybeEditingMemoId,
+      newPhotos: maybeNewPhotos,
+      newText: maybeNewText,
+      newAudios: maybeNewAudios
+    };
   }
 
-  const readPromises = files.map(file => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target.result;
-        img.onload = () => {
+  const targetDate = opts.date || State.activeDate;
+  const targetUser = opts.userId || State.currentUser;
+  const editingId = (opts.editingMemoId !== undefined) ? opts.editingMemoId : State.editingMemoId;
+
+  if (!targetDate || !targetUser) {
+    return {
+      date: targetDate || '',
+      userId: targetUser || '',
+      existingBytes: 0,
+      existingPhotoCount: 0,
+      otherBytes: 0,
+      otherPhotoCount: 0,
+      projectedBytes: 0,
+      projectedPhotoCount: 0,
+      deltaBytes: 0,
+      safeLimitBytes: MEMO_DAILY_SAFE_LIMIT_BYTES,
+      firestoreLimitBytes: FIRESTORE_DOC_MAX_BYTES,
+      availableSafeBytes: 0,
+      isWithinSafeLimit: false,
+      isWithinFirestoreLimit: false,
+      isHistoricalExempt: false,
+      isSizeIncreased: false,
+      isSizeDecreased: false,
+      invalidContext: true,
+      dbError: false,
+      canSave: false // FAIL-CLOSED: 缺少必要參數時禁止放行
+    };
+  }
+
+  let allMemos = [];
+  try {
+    allMemos = await DiaryDB.getMemosForDate(targetDate, targetUser);
+    if (!Array.isArray(allMemos)) allMemos = [];
+  } catch (err) {
+    console.warn('[Memo Capacity Engine] Error fetching memos for date:', err);
+    return {
+      date: targetDate,
+      userId: targetUser,
+      existingBytes: 0,
+      existingPhotoCount: 0,
+      otherBytes: 0,
+      otherPhotoCount: 0,
+      projectedBytes: 0,
+      projectedPhotoCount: 0,
+      deltaBytes: 0,
+      safeLimitBytes: MEMO_DAILY_SAFE_LIMIT_BYTES,
+      firestoreLimitBytes: FIRESTORE_DOC_MAX_BYTES,
+      availableSafeBytes: 0,
+      isWithinSafeLimit: false,
+      isWithinFirestoreLimit: false,
+      isHistoricalExempt: false,
+      isSizeIncreased: false,
+      isSizeDecreased: false,
+      invalidContext: false,
+      dbError: true,
+      error: err ? err.message : 'Database query failed',
+      canSave: false // FAIL-CLOSED: 資料庫查詢失敗時禁止放行，嚴禁假設當日無 Memo
+    };
+  }
+
+  const existingBytes = estimateMemoDocumentBytes(targetDate, allMemos);
+  const existingPhotoCount = allMemos.reduce((sum, m) => sum + (Array.isArray(m.images) ? m.images.length : 0), 0);
+
+  // 排除當前正在編輯之 Memo
+  const otherMemos = allMemos.filter(m => editingId === null || editingId === undefined || (String(m.id) !== String(editingId)));
+  const otherBytes = estimateMemoDocumentBytes(targetDate, otherMemos);
+  const otherPhotoCount = otherMemos.reduce((sum, m) => sum + (Array.isArray(m.images) ? m.images.length : 0), 0);
+
+  // 若未傳入任何新資料 (純查詢當日容量狀態)
+  const hasInput = (opts.newPhotos !== undefined) || (opts.newText !== undefined) || (opts.newAudios !== undefined);
+
+  let projectedMemos = [];
+  if (!hasInput) {
+    projectedMemos = allMemos;
+  } else {
+    let projectedMemo = null;
+    if (editingId !== null && editingId !== undefined) {
+      const original = allMemos.find(m => String(m.id) === String(editingId));
+      if (original) {
+        projectedMemo = {
+          ...original,
+          content: (opts.newText !== undefined) ? opts.newText : (original.content || ''),
+          images: (opts.newPhotos !== undefined) ? opts.newPhotos : (original.images || []),
+          audios: (opts.newAudios !== undefined) ? opts.newAudios : (original.audios || [])
+        };
+      } else {
+        projectedMemo = {
+          id: editingId,
+          date: targetDate,
+          time: '00:00',
+          content: opts.newText || '',
+          images: opts.newPhotos || [],
+          audios: opts.newAudios || []
+        };
+      }
+    } else {
+      projectedMemo = {
+        id: 'projected_' + Date.now(),
+        date: targetDate,
+        time: '00:00',
+        content: opts.newText || '',
+        images: opts.newPhotos || [],
+        audios: opts.newAudios || []
+      };
+    }
+    projectedMemos = [...otherMemos, projectedMemo];
+  }
+
+  const projectedBytes = estimateMemoDocumentBytes(targetDate, projectedMemos);
+  const projectedPhotoCount = projectedMemos.reduce((sum, m) => sum + (Array.isArray(m.images) ? m.images.length : 0), 0);
+  const deltaBytes = projectedBytes - existingBytes;
+
+  const isWithinSafeLimit = projectedBytes <= MEMO_DAILY_SAFE_LIMIT_BYTES;
+  const isWithinFirestoreLimit = projectedBytes <= FIRESTORE_DOC_MAX_BYTES;
+
+  // 歷史既有超額豁免：
+  // 若該使用者當日歷史既有資料已超過 850 KiB，只要編輯後尺寸未增加且仍在 Firestore 1 MiB 內，允許儲存
+  const isHistoricalExempt = existingBytes > MEMO_DAILY_SAFE_LIMIT_BYTES;
+  const isSizeIncreased = projectedBytes > existingBytes;
+  const isSizeDecreased = projectedBytes < existingBytes;
+
+  const canSave = (isWithinSafeLimit || (isHistoricalExempt && !isSizeIncreased)) && isWithinFirestoreLimit;
+
+  return {
+    date: targetDate,
+    userId: targetUser,
+    existingBytes,
+    existingPhotoCount,
+    otherBytes,
+    otherPhotoCount,
+    projectedBytes,
+    projectedPhotoCount,
+    deltaBytes,
+    safeLimitBytes: MEMO_DAILY_SAFE_LIMIT_BYTES,
+    firestoreLimitBytes: FIRESTORE_DOC_MAX_BYTES,
+    availableSafeBytes: Math.max(0, MEMO_DAILY_SAFE_LIMIT_BYTES - projectedBytes),
+    isWithinSafeLimit,
+    isWithinFirestoreLimit,
+    isHistoricalExempt,
+    isSizeIncreased,
+    isSizeDecreased,
+    invalidContext: false,
+    dbError: false,
+    canSave
+  };
+}
+window.getDailyMemoCapacity = getDailyMemoCapacity;
+
+/**
+ * 每日隨筆容量請求序號 (用於非同步競態防護，避免快速切換日期或使用者時造成舊資料覆蓋畫面)
+ */
+let memoCapacityRequestId = 0;
+
+function getMemoCapacityRequestId() {
+  return memoCapacityRequestId;
+}
+
+/**
+ * 格式化位元組為適合閱讀的 KiB 格式
+ */
+function formatCapacityBytes(bytes) {
+  if (bytes === undefined || bytes === null || isNaN(bytes)) return '0 KiB';
+  if (bytes <= 0) return '0 KiB';
+  const kib = Math.round(bytes / 1024);
+  return `${kib} KiB`;
+}
+
+/**
+ * 每日隨筆容量指示器 UI 渲染與狀態更新 (Phase 2-B)
+ * - 依據 getDailyMemoCapacity() 計算結果更新進度條與文字
+ * - 處理正常、接近上限 (>= 80%)、已達上限 (> 850 KiB)、歷史超額豁免、查詢失敗、無效上下文等狀態
+ * - 具備 Request ID 序列與狀態切換保護，防止快速切換日期或使用者時造成非同步競態覆蓋
+ * - 支援傳入 isProcessing 標記圖片壓縮/處理中
+ */
+async function updateDailyMemoCapacityUI(options = {}) {
+  const currentRequestId = ++memoCapacityRequestId;
+
+  const widget = (typeof document !== 'undefined') ? document.getElementById('memo-capacity-widget') : null;
+  const textEl = (typeof document !== 'undefined') ? document.getElementById('memo-capacity-text') : null;
+  const barFillEl = (typeof document !== 'undefined') ? document.getElementById('memo-capacity-bar-fill') : null;
+  const badgeEl = (typeof document !== 'undefined') ? document.getElementById('memo-capacity-badge') : null;
+  const hintEl = (typeof document !== 'undefined') ? document.getElementById('memo-capacity-hint') : null;
+
+  // 1. 若處於圖片壓縮或解碼處理中
+  if (options && options.isProcessing) {
+    if (textEl) textEl.textContent = '正在壓縮照片並估算容量...';
+    if (badgeEl) {
+      badgeEl.className = 'memo-capacity-badge badge-exempt';
+      badgeEl.textContent = '處理中';
+      badgeEl.classList.remove('hidden');
+    }
+    if (barFillEl) {
+      barFillEl.style.width = '30%';
+      barFillEl.className = 'memo-capacity-bar-fill bar-neutral';
+    }
+    if (hintEl) hintEl.classList.add('hidden');
+    return { isProcessing: true };
+  }
+
+  const targetDate = (options && options.date !== undefined) ? options.date : State.activeDate;
+  const targetUser = (options && options.userId !== undefined) ? options.userId : State.currentUser;
+  const editingId = (options && options.editingMemoId !== undefined) ? options.editingMemoId : State.editingMemoId;
+  const newPhotos = (options && options.newPhotos !== undefined) ? options.newPhotos : State.uploadedImages;
+
+  // 2. 缺少日期或使用者時 (無效上下文)
+  if (!targetDate || !targetUser) {
+    if (textEl) textEl.textContent = '無法確認容量 (未指定日期或使用者)';
+    if (barFillEl) {
+      barFillEl.style.width = '0%';
+      barFillEl.className = 'memo-capacity-bar-fill';
+    }
+    if (badgeEl) badgeEl.classList.add('hidden');
+    if (hintEl) hintEl.classList.add('hidden');
+    return { invalidContext: true };
+  }
+
+  // 3. 呼叫底層 getDailyMemoCapacity 核心計算
+  let capacity;
+  try {
+    const calcFn = (typeof window !== 'undefined' && window.getDailyMemoCapacity) ? window.getDailyMemoCapacity : getDailyMemoCapacity;
+    capacity = await calcFn({
+      date: targetDate,
+      userId: targetUser,
+      editingMemoId: editingId,
+      newPhotos: newPhotos
+    });
+  } catch (err) {
+    console.warn('[Memo Capacity UI] Failed to get capacity:', err);
+    capacity = { dbError: true, error: err ? err.message : 'Unknown error' };
+  }
+
+  // 非同步競態保護：
+  // 1. 若此期間已有更新的請求被發起 (currentRequestId !== memoCapacityRequestId)，放棄渲染舊請求
+  // 2. 若全域狀態中的 State.activeDate 或 State.currentUser 已切換為其他日期或使用者，放棄更新 DOM
+  if (currentRequestId !== memoCapacityRequestId) {
+    return capacity;
+  }
+  if (typeof State !== 'undefined' && (
+    (State.activeDate !== undefined && State.activeDate !== targetDate) ||
+    (State.currentUser !== undefined && State.currentUser !== targetUser)
+  )) {
+    return capacity;
+  }
+
+  // 若 DOM 元件不存在 (如純邏輯測試環境)，提早回傳計算結果
+  if (!widget || !textEl || !barFillEl) {
+    return capacity;
+  }
+
+  // 4. 資料庫查詢失敗 (Fail-Closed: 嚴禁假裝剩餘容量充足)
+  if (capacity.dbError) {
+    textEl.textContent = '無法確認容量狀態 (資料庫異常)';
+    if (badgeEl) {
+      badgeEl.className = 'memo-capacity-badge badge-danger';
+      badgeEl.textContent = '讀取失敗';
+      badgeEl.classList.remove('hidden');
+    }
+    barFillEl.style.width = '0%';
+    barFillEl.className = 'memo-capacity-bar-fill bar-danger';
+    if (hintEl) {
+      hintEl.className = 'memo-capacity-hint hint-danger';
+      hintEl.textContent = '本機資料庫讀取異常，無法計算安全容量。';
+      hintEl.classList.remove('hidden');
+    }
+    return capacity;
+  }
+
+  // 5. 無效參數
+  if (capacity.invalidContext) {
+    textEl.textContent = '無法確認容量 (未指定日期或使用者)';
+    barFillEl.style.width = '0%';
+    barFillEl.className = 'memo-capacity-bar-fill';
+    if (badgeEl) badgeEl.classList.add('hidden');
+    if (hintEl) hintEl.classList.add('hidden');
+    return capacity;
+  }
+
+  // 6. 正常與特殊狀態解析
+  const {
+    existingBytes,
+    projectedBytes,
+    availableSafeBytes,
+    safeLimitBytes,
+    isWithinSafeLimit,
+    isHistoricalExempt,
+    isSizeIncreased
+  } = capacity;
+
+  const usedStr = formatCapacityBytes(projectedBytes);
+  const limitStr = formatCapacityBytes(safeLimitBytes); // '850 KiB'
+  const availStr = formatCapacityBytes(availableSafeBytes);
+  const percent = Math.min(100, Math.round((projectedBytes / safeLimitBytes) * 100));
+
+  // 判斷是否處於草稿階段 (已選取新照片或在編輯中)
+  const hasStagedPhotos = Array.isArray(newPhotos) && newPhotos.length > 0;
+  const prefix = (hasStagedPhotos && (projectedBytes !== existingBytes)) ? '預估使用' : '今日已用';
+
+  // 狀態分支 A: 歷史超額豁免
+  if (isHistoricalExempt) {
+    textEl.textContent = `${prefix} ${usedStr} / ${limitStr} · 歷史資料已超額`;
+    barFillEl.style.width = '100%';
+
+    if (badgeEl) {
+      if (isSizeIncreased) {
+        badgeEl.className = 'memo-capacity-badge badge-danger';
+        badgeEl.textContent = '超額增加';
+      } else {
+        badgeEl.className = 'memo-capacity-badge badge-exempt';
+        badgeEl.textContent = '歷史超額';
+      }
+      badgeEl.classList.remove('hidden');
+    }
+
+    if (hintEl) {
+      if (isSizeIncreased) {
+        barFillEl.className = 'memo-capacity-bar-fill bar-danger';
+        hintEl.className = 'memo-capacity-hint hint-danger';
+        hintEl.textContent = `修改後容量不可大於原本歷史容量 (${formatCapacityBytes(existingBytes)})。`;
+      } else {
+        barFillEl.className = 'memo-capacity-bar-fill bar-neutral';
+        hintEl.className = 'memo-capacity-hint hint-exempt';
+        hintEl.textContent = '此日歷史隨筆已超出 850 KiB 安全上限。您仍可編輯，或可刪除照片以釋出空間。';
+      }
+      hintEl.classList.remove('hidden');
+    }
+    return capacity;
+  }
+
+  // 狀態分支 B: 已達或超出上限 (> 850 KiB)
+  if (!isWithinSafeLimit) {
+    const overBytes = projectedBytes - safeLimitBytes;
+    const overStr = formatCapacityBytes(overBytes);
+    textEl.textContent = `${prefix} ${usedStr} / ${limitStr} · 超出 ${overStr}`;
+    barFillEl.style.width = '100%';
+    barFillEl.className = 'memo-capacity-bar-fill bar-danger';
+
+    if (badgeEl) {
+      badgeEl.className = 'memo-capacity-badge badge-danger';
+      badgeEl.textContent = '已達上限';
+      badgeEl.classList.remove('hidden');
+    }
+
+    if (hintEl) {
+      hintEl.className = 'memo-capacity-hint hint-danger';
+      hintEl.textContent = '容量已達每日安全上限（850 KiB），請移除部分照片後再儲存。';
+      hintEl.classList.remove('hidden');
+    }
+    return capacity;
+  }
+
+  // 狀態分支 C: 接近上限 (>= 80% 即 >= 680 KiB)
+  if (percent >= 80) {
+    textEl.textContent = `${prefix} ${usedStr} / ${limitStr} · 剩餘 ${availStr}`;
+    barFillEl.style.width = `${percent}%`;
+    barFillEl.className = 'memo-capacity-bar-fill bar-warning';
+
+    if (badgeEl) {
+      badgeEl.className = 'memo-capacity-badge badge-warning';
+      badgeEl.textContent = '接近上限';
+      badgeEl.classList.remove('hidden');
+    }
+
+    if (hintEl) {
+      hintEl.className = 'memo-capacity-hint hint-warning';
+      hintEl.textContent = '容量即將用盡，建議留意新增照片之檔案大小。';
+      hintEl.classList.remove('hidden');
+    }
+    return capacity;
+  }
+
+  // 狀態分支 D: 正常狀態 (< 80%)
+  textEl.textContent = `${prefix} ${usedStr} / ${limitStr} · 剩餘 ${availStr}`;
+  barFillEl.style.width = `${Math.max(2, percent)}%`;
+  barFillEl.className = 'memo-capacity-bar-fill';
+  if (badgeEl) badgeEl.classList.add('hidden');
+  if (hintEl) hintEl.classList.add('hidden');
+
+  return capacity;
+}
+
+/**
+ * 單張圖片檔案壓縮核心函式
+ * - 縮放最長邊至 1280px 內，維持原始寬高比
+ * - 輸出 JPEG，初始品質 0.75
+ * - 若 Base64 長度大於 280,000 字元，二次壓縮品質降至 0.60
+ * - 嚴格防護：解碼失敗或格式不支援時絕不回傳原始大圖，安全返回失敗物件
+ */
+function compressImageFile(file, options = {}) {
+  return new Promise((resolve) => {
+    if (!file || (typeof file !== 'object')) {
+      resolve({
+        success: false,
+        fileName: file ? file.name : 'unknown',
+        error: '無效的檔案物件'
+      });
+      return;
+    }
+
+    const fileName = file.name || 'image.jpg';
+    let reader;
+    try {
+      reader = new FileReader();
+    } catch (e) {
+      resolve({
+        success: false,
+        fileName: fileName,
+        error: '無法初始化 FileReader: ' + e.message
+      });
+      return;
+    }
+
+    reader.onload = (event) => {
+      const rawDataUrl = event.target ? event.target.result : null;
+      if (!rawDataUrl) {
+        resolve({
+          success: false,
+          fileName: fileName,
+          error: '檔案讀取結果為空'
+        });
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        try {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          const maxDim = 1200; // 保留清晰原圖供 Lightbox 查看
-          let w = img.width;
-          let h = img.height;
+          const maxDim = options.maxDimension || MEMO_IMAGE_MAX_DIMENSION;
+          let w = img.width || 0;
+          let h = img.height || 0;
+
+          if (w <= 0 || h <= 0) {
+            img.src = '';
+            resolve({
+              success: false,
+              fileName: fileName,
+              error: '圖片尺寸無效 (0x0)'
+            });
+            return;
+          }
+
           if (w > maxDim || h > maxDim) {
             if (w > h) {
               h = Math.round((h * maxDim) / w);
@@ -3003,25 +3657,122 @@ function handleImageUpload(e) {
               h = maxDim;
             }
           }
+
           canvas.width = w;
           canvas.height = h;
           ctx.drawImage(img, 0, 0, w, h);
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-          resolve(compressedBase64);
-        };
-        img.onerror = () => resolve(event.target.result);
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  });
 
-  Promise.all(readPromises).then(results => {
-    const validImages = results.filter(Boolean);
-    if (validImages.length > 0) {
-      startCropQueue(validImages);
-    }
+          const primaryQuality = options.primaryQuality || MEMO_IMAGE_PRIMARY_QUALITY;
+          let compressedBase64 = canvas.toDataURL('image/jpeg', primaryQuality);
+
+          const secondaryThreshold = options.secondaryThreshold || MEMO_IMAGE_SECONDARY_THRESHOLD;
+          if (compressedBase64.length > secondaryThreshold) {
+            const secondaryQuality = options.secondaryQuality || MEMO_IMAGE_SECONDARY_QUALITY;
+            compressedBase64 = canvas.toDataURL('image/jpeg', secondaryQuality);
+          }
+
+          // 釋放記憶體
+          canvas.width = 0;
+          canvas.height = 0;
+          img.src = '';
+
+          resolve({
+            success: true,
+            fileName: fileName,
+            dataUrl: compressedBase64,
+            size: compressedBase64.length,
+            width: w,
+            height: h
+          });
+        } catch (canvasErr) {
+          img.src = '';
+          resolve({
+            success: false,
+            fileName: fileName,
+            error: 'Canvas 壓縮處理錯誤: ' + canvasErr.message
+          });
+        }
+      };
+
+      img.onerror = () => {
+        // 重要修復：嚴格禁止 fallback 至原始未壓縮圖片 (event.target.result)，安全拒絕
+        img.src = '';
+        resolve({
+          success: false,
+          fileName: fileName,
+          error: '圖片解碼失敗或格式不支援（例如未轉換之 HEIC 格式）'
+        });
+      };
+
+      img.src = rawDataUrl;
+    };
+
+    reader.onerror = () => {
+      resolve({
+        success: false,
+        fileName: fileName,
+        error: '檔案讀取失敗'
+      });
+    };
+
+    reader.readAsDataURL(file);
   });
+}
+window.compressImageFile = compressImageFile;
+
+// ==================== 備忘錄圖片額度、壓縮與預覽 ====================
+async function getExistingDailyPhotoCount(dateStr, userId, excludeMemoId = null) {
+  if (!dateStr || !userId) return 0;
+  try {
+    const rawMemos = await DiaryDB.getMemosForDate(dateStr, userId);
+    if (!Array.isArray(rawMemos)) return 0;
+    return rawMemos
+      .filter(m => excludeMemoId === null || (String(m.id) !== String(excludeMemoId)))
+      .reduce((sum, m) => sum + (Array.isArray(m.images) ? m.images.length : 0), 0);
+  } catch (err) {
+    console.warn('[Memo Photo Quota] Error counting existing photos:', err);
+    return 0;
+  }
+}
+window.getExistingDailyPhotoCount = getExistingDailyPhotoCount;
+
+async function handleImageUpload(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+
+  // 標記圖片壓縮與處理中狀態
+  updateDailyMemoCapacityUI({ isProcessing: true });
+
+  // 嚴格壓縮：循序處理多張圖片，避免同時大量解碼造成行動端記憶體崩潰
+  const validImages = [];
+  const failedFiles = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      const compressFn = (typeof window !== 'undefined' && window.compressImageFile) ? window.compressImageFile : compressImageFile;
+      const res = await compressFn(file);
+      if (res && res.success && res.dataUrl) {
+        validImages.push(res.dataUrl);
+      } else {
+        failedFiles.push({ name: file.name, error: (res && res.error) ? res.error : '壓縮失敗' });
+      }
+    } catch (err) {
+      failedFiles.push({ name: file.name, error: err ? err.message : '處理異常' });
+    }
+  }
+
+  if (failedFiles.length > 0) {
+    const failedNames = failedFiles.map(f => f.name).join('、');
+    alert(`以下圖片無法處理或解碼失敗，已被略過：\n${failedNames}\n請確認圖片格式是否支援（例如 HEIC 請先轉為 JPG/PNG）。`);
+  }
+
+  if (validImages.length > 0) {
+    const cropFn = (typeof window !== 'undefined' && window.startCropQueue) ? window.startCropQueue : startCropQueue;
+    cropFn(validImages);
+  } else {
+    updateDailyMemoCapacityUI();
+  }
 
   e.target.value = '';
 }
@@ -3030,12 +3781,6 @@ function renderUploadedImages() {
   const preview = document.getElementById('memo-images-preview');
   if (!preview) return;
   preview.innerHTML = '';
-
-  const statusText = document.getElementById('upload-status-text');
-  if (statusText) {
-    const len = State.uploadedImages.length;
-    statusText.textContent = len > 0 ? `已選擇 ${len} 張圖片` : '未加入圖片';
-  }
 
   const fragment = document.createDocumentFragment();
   State.uploadedImages.forEach((imgData, index) => {
@@ -3049,6 +3794,9 @@ function renderUploadedImages() {
     img.src = safeSrc;
     img.loading = 'lazy'; // Lazy-load images
     img.alt = '上傳相片';
+    img.onerror = () => {
+      wrapper.style.display = 'none';
+    };
 
     if (hasCrop && crop) {
       const px = crop.xPercent !== undefined ? crop.xPercent : 50;
@@ -3076,33 +3824,130 @@ function renderUploadedImages() {
   });
   preview.appendChild(fragment);
 
+  // 更新照片上傳狀態文字 (Phase 2-C.2: 移除固定張數配額顯示，改由容量進度條呈現)
+  const currentLen = State.uploadedImages.length;
+  const statusText = document.getElementById('upload-status-text');
+  if (statusText) {
+    statusText.textContent = currentLen > 0 ? `已選取 ${currentLen} 張圖片` : '未加入圖片';
+  }
+
+  const addPhotosLabel = document.querySelector('label[for="image-upload-input"]');
+  if (addPhotosLabel) {
+    addPhotosLabel.classList.remove('disabled');
+    addPhotosLabel.style.opacity = '';
+    addPhotosLabel.style.cursor = 'pointer';
+  }
+
   // 自動保存隨筆圖片草稿
   if (State.editingMemoId === null) {
     localStorage.setItem(`draft_memo_images_${State.currentUser}_${State.activeDate}`, JSON.stringify(State.uploadedImages));
   }
+
+  // 異步更新每日隨筆容量指示器 (隨照片新增、刪除或編輯載入動態重算)
+  updateDailyMemoCapacityUI();
 }
 
 // ==================== 備忘錄新增與編輯流程 ====================
-async function handleMemoSubmit() {
-  if (isDateInArchivedCycle(State.activeDate)) {
-    window.showToast('唯讀狀態：無法修改已封存的隨筆。', 'error');
-    return;
-  }
-  const textarea = document.getElementById('memo-textarea');
-  if (!textarea) return;
+let isMemoSubmitting = false;
 
-  const content = textarea.value.trim();
-  if (!content && State.uploadedImages.length === 0) {
-    alert('請填寫隨筆內容或上傳至少一張圖片。');
+function getIsMemoSubmitting() {
+  return isMemoSubmitting;
+}
+
+async function handleMemoSubmit() {
+  if (isMemoSubmitting) {
+    console.warn('[MemoSubmit] Submission already in progress, ignoring duplicate submit.');
     return;
   }
-  if (!State.currentUser) {
-    console.warn("[Auth Race Protection] Blocked memo write because State.currentUser is null");
-    alert("請先完成登入後再進行隨筆操作。");
+
+  const submitBtn = document.getElementById('btn-submit-memo');
+  if (submitBtn && submitBtn.disabled) {
     return;
+  }
+
+  // 立即設定防重複提交鎖定與按鈕狀態，防止非同步期間連點穿透
+  isMemoSubmitting = true;
+  let originalBtnText = '';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add('is-submitting');
+    originalBtnText = submitBtn.textContent;
+    submitBtn.textContent = State.editingMemoId === null ? 'SAVING...' : 'UPDATING...';
   }
 
   try {
+    if (isDateInArchivedCycle(State.activeDate)) {
+      window.showToast('唯讀狀態：無法修改已封存的隨筆。', 'error');
+      return;
+    }
+    const textarea = document.getElementById('memo-textarea');
+    if (!textarea) return;
+
+    const content = textarea.value.trim();
+    if (!content && State.uploadedImages.length === 0) {
+      alert('請填寫隨筆內容或上傳至少一張圖片。');
+      return;
+    }
+    if (!State.currentUser) {
+      console.warn("[Auth Race Protection] Blocked memo write because State.currentUser is null");
+      alert("請先完成登入後再進行隨筆操作。");
+      return;
+    }
+
+    // 每日隨筆容量安全檢查 (Phase 2-C.1 / Phase 2-C.2: 以容量取代固定照片張數限制)
+    let capacity;
+    try {
+      const calcFn = (typeof window !== 'undefined')
+        ? window.getDailyMemoCapacity
+        : (typeof getDailyMemoCapacity === 'function' ? getDailyMemoCapacity : null);
+
+      if (typeof calcFn !== 'function') {
+        console.error('[MemoSubmit] 未找到容量計算函式 getDailyMemoCapacity');
+        alert('無法驗證隨筆容量（系統未載入容量計算模組），儲存已中止。');
+        return;
+      }
+
+      capacity = await calcFn({
+        date: State.activeDate,
+        userId: State.currentUser,
+        editingMemoId: State.editingMemoId,
+        newText: content,
+        newPhotos: State.uploadedImages
+      });
+    } catch (capacityErr) {
+      console.error('[MemoSubmit] 容量驗證過程發生例外異常:', capacityErr);
+      alert('隨筆容量驗證失敗，無法確認安全限制，儲存已中止。');
+      return;
+    }
+
+    if (!capacity || !capacity.canSave) {
+      // 1. DB 查詢失敗或上下文無效 (Fail-Closed)
+      if (!capacity || capacity.dbError || capacity.invalidContext) {
+        alert('無法驗證隨筆容量（資料庫讀取異常或未指定日期/使用者），儲存已中止。');
+        return;
+      }
+
+      // 2. 歷史超額且容量增加
+      if (capacity.isHistoricalExempt && capacity.isSizeIncreased) {
+        const curStr = formatCapacityBytes(capacity.projectedBytes);
+        const origStr = formatCapacityBytes(capacity.existingBytes);
+        alert(`此日隨筆已超出 850 KiB 安全上限，且修改後容量 (${curStr}) 不可大於原本歷史容量 (${origStr})。必須減少文字或照片才能儲存。`);
+        return;
+      }
+
+      // 3. 預估容量超過 1 MiB Firestore 單文件硬限制
+      if (!capacity.isWithinFirestoreLimit) {
+        const curStr = formatCapacityBytes(capacity.projectedBytes);
+        alert(`隨筆預估容量 (${curStr}) 已超過 Firestore 單文件硬限制 (1 MiB)，請縮減照片尺寸或數量後再儲存。`);
+        return;
+      }
+
+      // 4. 一般容量超過 850 KiB
+      const curStr = formatCapacityBytes(capacity.projectedBytes);
+      alert(`隨筆預估容量 (${curStr}) 已超出每日安全上限（850 KiB），請減少內容或照片後再儲存。`);
+      return;
+    }
+
     if (State.editingMemoId === null) {
       // 1. 新增模式 (Create)
       const now = new Date();
@@ -3145,6 +3990,17 @@ async function handleMemoSubmit() {
   } catch (err) {
     console.error('儲存隨筆失敗:', err);
     alert('儲存隨筆失敗：' + (err ? (err.name + ': ' + err.message + '\nStack: ' + err.stack) : '未知錯誤'));
+  } finally {
+    isMemoSubmitting = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('is-submitting');
+      if (State.editingMemoId === null) {
+        submitBtn.textContent = 'ADD';
+      } else if (originalBtnText) {
+        submitBtn.textContent = originalBtnText;
+      }
+    }
   }
 }
 
@@ -3156,13 +4012,13 @@ function loadMemoToForm(memo) {
 
   if (!textarea) return;
 
+  // 切換為編輯狀態
+  State.editingMemoId = memo.id;
+
   // 載入內文與圖片到暫存區
   textarea.value = memo.content;
   State.uploadedImages = [...(memo.images || [])];
   renderUploadedImages();
-
-  // 切換為編輯狀態
-  State.editingMemoId = memo.id;
   
   if (formTitle) formTitle.textContent = `正在修改發布於 ${memo.time} 的隨筆：`;
   if (submitBtn) submitBtn.textContent = 'UPDATE';
@@ -3179,16 +4035,21 @@ function exitEditMode() {
   const submitBtn = document.getElementById('btn-submit-memo');
   const cancelBtn = document.getElementById('btn-cancel-memo');
 
-  // 清空暫存與輸入
+  // 清空暫存與輸入，恢復非編輯狀態
   if (textarea) textarea.value = '';
+  State.editingMemoId = null;
   State.uploadedImages = [];
   renderUploadedImages();
-  State.editingMemoId = null;
 
   // 恢復預設介面文字與按鈕
   if (formTitle) formTitle.textContent = '時光隨筆';
-  if (submitBtn) submitBtn.textContent = 'ADD';
+  if (submitBtn) {
+    submitBtn.textContent = 'ADD';
+    submitBtn.disabled = false;
+    submitBtn.classList.remove('is-submitting');
+  }
   if (cancelBtn) cancelBtn.classList.add('hidden');
+  isMemoSubmitting = false;
 }
 
 async function handleDeleteMemo(id) {
@@ -3813,7 +4674,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
       'black': '普通',
       'yellow': '喜悅',
       'green': '平靜',
-      'blue': '孤單',
+      'blue': '難過',
       'red': '波瀾',
       'none': '無紀錄'
     };
@@ -3928,7 +4789,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
           const reviewMemoDrawer = document.getElementById('review-memo-drawer');
           const reviewMemoTitle = document.getElementById('review-memo-title');
           if (reviewMemoDrawer && reviewMemoTitle) {
-            reviewMemoTitle.textContent = '隨筆';
+            reviewMemoTitle.textContent = `${formattedDate} 隨筆`;
             renderReviewMemoTimeline(userMemos);
             reviewMemoDrawer.classList.remove('hidden');
           }
@@ -3971,7 +4832,7 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
                 const reviewMemoDrawer = document.getElementById('review-memo-drawer');
                 const reviewMemoTitle = document.getElementById('review-memo-title');
                 if (reviewMemoDrawer && reviewMemoTitle) {
-                  reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
+                  reviewMemoTitle.textContent = `${formattedDate} ${partnerName} 的隨筆`;
                   renderReviewMemoTimeline(partnerMemos);
                   reviewMemoDrawer.classList.remove('hidden');
                 }
@@ -4060,34 +4921,43 @@ function renderReviewMemoTimeline(memos) {
       imgGrid.style.marginTop = '6px';
       
       memo.images.forEach(imgData => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'timeline-image-wrapper';
-        
-        const { original, hasCrop, crop } = parseMemoImageData(imgData);
-        const safeSrc = isSafeImageUri(original) ? original : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-        
-        const img = document.createElement('img');
-        img.src = safeSrc;
-        img.loading = 'lazy';
-        img.alt = '隨筆相片';
+        try {
+          const { original, hasCrop, crop } = parseMemoImageData(imgData);
+          if (!original) return;
+          const safeSrc = isSafeImageUri(original) ? original : '';
+          if (!safeSrc) return;
 
-        if (hasCrop && crop) {
-          const px = crop.xPercent !== undefined ? crop.xPercent : 50;
-          const py = crop.yPercent !== undefined ? crop.yPercent : 50;
-          const sc = crop.scale !== undefined ? crop.scale : 1;
-          img.style.objectPosition = `${px}% ${py}%`;
-          if (sc > 1.001) {
-            img.style.transform = `scale(${sc})`;
-            img.style.transformOrigin = `${px}% ${py}%`;
+          const wrapper = document.createElement('div');
+          wrapper.className = 'timeline-image-wrapper';
+          
+          const img = document.createElement('img');
+          img.src = safeSrc;
+          img.loading = 'lazy';
+          img.alt = '隨筆相片';
+          img.onerror = () => {
+            wrapper.style.display = 'none';
+          };
+
+          if (hasCrop && crop) {
+            const px = crop.xPercent !== undefined ? crop.xPercent : 50;
+            const py = crop.yPercent !== undefined ? crop.yPercent : 50;
+            const sc = crop.scale !== undefined ? crop.scale : 1;
+            img.style.objectPosition = `${px}% ${py}%`;
+            if (sc > 1.001) {
+              img.style.transform = `scale(${sc})`;
+              img.style.transformOrigin = `${px}% ${py}%`;
+            }
           }
-        }
 
-        img.addEventListener('click', () => {
-          openPhotoViewer(safeSrc);
-        });
-        
-        wrapper.appendChild(img);
-        imgGrid.appendChild(wrapper);
+          img.addEventListener('click', () => {
+            openPhotoViewer(safeSrc);
+          });
+          
+          wrapper.appendChild(img);
+          imgGrid.appendChild(wrapper);
+        } catch (imgErr) {
+          console.warn('[Review Memo Timeline] Failed to render image:', imgErr);
+        }
       });
       
       body.appendChild(imgGrid);
@@ -4294,8 +5164,9 @@ async function updateWeeklyCard(dateStr, diary) {
   if (diary === undefined) {
     diary = await DiaryDB.getDiary(dateStr, State.currentUser);
   }
+  const memos = await DiaryDB.getMemosForDate(dateStr, State.currentUser);
   
-  const newCard = createDiaryReviewCard(dateStr, diary);
+  const newCard = createDiaryReviewCard(dateStr, diary, memos);
   card.replaceWith(newCard);
   weeklyCardMap.set(dateStr, newCard);
   try {
@@ -4410,7 +5281,8 @@ async function renderWeeklyReview() {
 
   for (const dateStr of dates) {
     const diary = await DiaryDB.getDiary(dateStr, State.currentUser);
-    const cardNode = createDiaryReviewCard(dateStr, diary);
+    const memos = await DiaryDB.getMemosForDate(dateStr, State.currentUser);
+    const cardNode = createDiaryReviewCard(dateStr, diary, memos);
     newCardMap.set(dateStr, cardNode);
     if (fragment.appendChild) {
       fragment.appendChild(cardNode);
@@ -4441,7 +5313,7 @@ async function renderWeeklyReview() {
 }
 
 // 3. DiaryReviewCard 元件：產生單日日記展示卡片 DOM
-function createDiaryReviewCard(dateStr, diary) {
+function createDiaryReviewCard(dateStr, diary, memos) {
   const card = document.createElement('div');
   card.className = 'diary-review-card';
   card.setAttribute('data-date', dateStr);
@@ -4543,6 +5415,48 @@ function createDiaryReviewCard(dateStr, diary) {
     emptyMsg.className = 'diary-review-card-empty';
     emptyMsg.textContent = '今天沒有寫下任何日記字句。';
     card.appendChild(emptyMsg);
+  }
+
+  // 底部列（右下角 Memo 數量 Badge 與開啟入口）
+  const renderMemoBadge = (memoList) => {
+    if (!memoList || memoList.length === 0) return;
+    const memoCount = memoList.length;
+    let footer = card.querySelector('.diary-review-card-footer');
+    if (!footer) {
+      footer = document.createElement('div');
+      footer.className = 'diary-review-card-footer';
+      footer.style.cssText = 'display: flex; justify-content: flex-end; align-items: center; margin-top: 8px; width: 100%;';
+      card.appendChild(footer);
+    }
+    const memoBadge = document.createElement('button');
+    memoBadge.className = 'memo-indicator weekly-card-memo-badge';
+    memoBadge.textContent = formatMemoIndicator(memoCount);
+    memoBadge.title = '閱讀隨筆';
+    
+    // 點擊 Memo Badge 直接開啟該日期的隨筆抽屜
+    memoBadge.addEventListener('click', (e) => {
+      e.stopPropagation(); // 阻止卡片點擊事件 (避免開啟日記詳情或編輯抽屜)
+      const reviewMemoDrawer = document.getElementById('review-memo-drawer');
+      const reviewMemoTitle = document.getElementById('review-memo-title');
+      if (reviewMemoDrawer && reviewMemoTitle) {
+        reviewMemoTitle.textContent = `${formattedDate} 隨筆`;
+        renderReviewMemoTimeline(memoList);
+        reviewMemoDrawer.classList.remove('hidden');
+      }
+    });
+
+    footer.appendChild(memoBadge);
+  };
+
+  if (Array.isArray(memos)) {
+    renderMemoBadge(memos);
+  } else if (typeof DiaryDB !== 'undefined' && DiaryDB.getMemosForDate && State.currentUser) {
+    // 異步備用載入 (若外部調用未帶入 memos)
+    DiaryDB.getMemosForDate(dateStr, State.currentUser).then(fetched => {
+      if (fetched && fetched.length > 0 && !card.querySelector('.weekly-card-memo-badge')) {
+        renderMemoBadge(fetched);
+      }
+    }).catch(() => {});
   }
   
   // 點擊事件交互處理
@@ -5468,23 +6382,41 @@ async function openEditDiaryDrawer(dateStr) {
       overlay.addEventListener('click', () => drawer.classList.add('hidden'));
     }
     
-    // 網格點擊聚焦
-    if (grid) {
-      grid.addEventListener('click', () => textarea.focus());
-    }
-    
-    // 輸入監聽
-    textarea.addEventListener('input', (e) => {
-      const rawText = e.target.value;
+    // 輸入監聽與 IME Composition 保護
+    let isEditComposing = false;
+
+    // 稿紙觸控與點擊精確跳格定位 (Mobile Touch & Click Caret Positioning with Native Override Prevention)
+    bindManuscriptCaretEvents({
+      grid,
+      textarea,
+      getIsComposing: () => isEditComposing,
+      highlightCursor: highlightEditManuscriptCursor
+    });
+    const syncEditDiaryInputState = (targetTextarea) => {
+      const rawText = targetTextarea.value || '';
       const graphemes = getGraphemes(rawText);
       let text = rawText;
       if (graphemes.length > 50) {
         text = graphemes.slice(0, 50).join('');
-        e.target.value = text;
+        targetTextarea.value = text;
       }
       if (wordCount) wordCount.textContent = `${Math.min(graphemes.length, 50)} / 50`;
       updateEditManuscriptCells(text);
       highlightEditManuscriptCursor();
+    };
+
+    textarea.addEventListener('compositionstart', () => {
+      isEditComposing = true;
+    });
+
+    textarea.addEventListener('compositionend', () => {
+      isEditComposing = false;
+      syncEditDiaryInputState(textarea);
+    });
+
+    textarea.addEventListener('input', (e) => {
+      if (isEditComposing) return;
+      syncEditDiaryInputState(e.target);
     });
     
     textarea.addEventListener('focus', highlightEditManuscriptCursor);
@@ -5596,3 +6528,19 @@ window.startNewThreeYearCycle = startNewThreeYearCycle;
 window.archiveCurrentCycle = archiveCurrentCycle;
 window.getCycleStartYear = getCycleStartYear;
 window.checkThreeYearCompletion = checkThreeYearCompletion;
+window.handleMemoSubmit = handleMemoSubmit;
+window.exitEditMode = exitEditMode;
+window.getIsMemoSubmitting = getIsMemoSubmitting;
+window.MEMO_DAILY_SAFE_LIMIT_BYTES = MEMO_DAILY_SAFE_LIMIT_BYTES;
+window.FIRESTORE_DOC_MAX_BYTES = FIRESTORE_DOC_MAX_BYTES;
+window.MEMO_IMAGE_MAX_DIMENSION = MEMO_IMAGE_MAX_DIMENSION;
+window.MEMO_IMAGE_PRIMARY_QUALITY = MEMO_IMAGE_PRIMARY_QUALITY;
+window.MEMO_IMAGE_SECONDARY_QUALITY = MEMO_IMAGE_SECONDARY_QUALITY;
+window.MEMO_IMAGE_SECONDARY_THRESHOLD = MEMO_IMAGE_SECONDARY_THRESHOLD;
+window.estimateMemoDocumentBytes = estimateMemoDocumentBytes;
+window.getDailyMemoCapacity = getDailyMemoCapacity;
+window.compressImageFile = compressImageFile;
+window.formatCapacityBytes = formatCapacityBytes;
+window.updateDailyMemoCapacityUI = updateDailyMemoCapacityUI;
+window.getMemoCapacityRequestId = () => memoCapacityRequestId;
+window.setupEventListeners = setupEventListeners;

@@ -41,6 +41,12 @@ function isSafeImageUri(uri) {
       return false;
     }
   }
+  if (/^blob:/i.test(trimmed)) {
+    return true;
+  }
+  if (/^(\.|\/|[a-zA-Z0-9_\-\/])+\.(png|jpe?g|gif|webp|svg)$/i.test(trimmed)) {
+    return true;
+  }
   return false;
 }
 

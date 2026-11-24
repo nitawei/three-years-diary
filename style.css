@@ -316,6 +316,7 @@ body {
 .manuscript-grid {
   display: grid;
   grid-template-columns: repeat(10, 1fr); /* 10 columns */
+  grid-template-rows: repeat(5, 1fr); /* 5 uniform rows (Phase 3-B.2 geometry fix) */
   gap: 0; /* No gaps so cells touch each other */
   width: 100%;
   border-top: 1.5px solid var(--color-border-visible);
@@ -673,6 +674,103 @@ body {
   margin-left: 4px;
   margin-top: 0;
   text-align: left;
+}
+
+/* ==================== 隨筆每日容量指示元件 (Phase 2-B) ==================== */
+.memo-capacity-widget {
+  margin-top: -4px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background-color: rgba(0, 0, 0, 0.015);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  transition: var(--transition-normal);
+}
+
+.memo-capacity-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.memo-capacity-text {
+  font-size: 0.72rem;
+  color: var(--color-text-sub);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.memo-capacity-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.memo-capacity-badge.badge-warning {
+  background-color: rgba(233, 196, 106, 0.2);
+  color: #B28228;
+}
+
+.memo-capacity-badge.badge-danger {
+  background-color: rgba(231, 111, 81, 0.18);
+  color: var(--color-text-red);
+}
+
+.memo-capacity-badge.badge-exempt {
+  background-color: rgba(142, 154, 175, 0.18);
+  color: var(--color-primary);
+}
+
+.memo-capacity-bar-track {
+  width: 100%;
+  height: 4px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.memo-capacity-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-mood-green);
+  transition: width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1), background-color 0.3s ease;
+}
+
+.memo-capacity-bar-fill.bar-warning {
+  background-color: var(--color-mood-yellow);
+}
+
+.memo-capacity-bar-fill.bar-danger {
+  background-color: var(--color-mood-red);
+}
+
+.memo-capacity-bar-fill.bar-neutral {
+  background-color: var(--color-primary);
+}
+
+.memo-capacity-hint {
+  font-size: 0.68rem;
+  margin-top: 5px;
+  line-height: 1.35;
+  color: var(--color-text-sub);
+}
+
+.memo-capacity-hint.hint-warning {
+  color: #B28228;
+}
+
+.memo-capacity-hint.hint-danger {
+  color: var(--color-text-red);
+}
+
+.memo-capacity-hint.hint-exempt {
+  color: var(--color-primary);
 }
 
 /* Image grid previews in Memo Drawer */
