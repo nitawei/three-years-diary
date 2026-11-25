@@ -6278,7 +6278,7 @@ async function openEditDiaryDrawer(dateStr) {
   
   // 2. 設定標題日期 (單一相連標題)
   if (title) {
-    title.textContent = `編輯日記 · ${dateStr.replace(/-/g, '.')}`;
+    title.textContent = `EDIT · ${dateStr.replace(/-/g, '.')}`;
   }
   
   // 3. 載入當天日記

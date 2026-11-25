@@ -32,13 +32,13 @@
       }
     })();
   </script>
-  <!-- Google Fonts: Outfit for sans-serif UI, Noto Serif TC for elegant serif writing feel -->
+  <!-- Google Fonts: Outfit for sans-serif UI, Noto Serif TC for elegant serif writing feel, Special Elite for typewriter stamps -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700&family=Outfit:wght@300;400;500;600&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Noto+Serif+TC:wght@400;500;700&family=Outfit:wght@300;400;500;600&family=Special+Elite&display=swap" rel="stylesheet">
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest" defer></script>
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=10">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="shortcut icon" href="apple-touch-icon.png" type="image/png">
   <link rel="manifest" href="manifest.json">
@@ -51,6 +51,25 @@
   <meta property="og:image" content="og-image.png">
 </head>
 <body>
+
+  <!-- Heavy Distress & Ink Bite SVG 濾鏡 (僅供 Memo 抽屜使用，全站其他區域隔離) -->
+  <svg class="svg-filters" aria-hidden="true" style="position: absolute; width: 0; height: 0; pointer-events: none;">
+    <defs>
+      <!-- 濾鏡 1: 活版印刷微滲墨與紙張咬印 (Letterpress Ink Bite & Bleed) -->
+      <filter id="ink-bite" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.65" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+
+      <!-- 濾鏡 2: 木刻版印重度破碎 (Woodblock Heavy Distress) -->
+      <filter id="distress-heavy" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" result="noise"/>
+        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 6 -1.8" in="noise" result="heavyNoise"/>
+        <feComposite in="SourceGraphic" in2="heavyNoise" operator="in" result="distressed"/>
+        <feDisplacementMap in="distressed" in2="noise" scale="0.75" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
 
   <!-- App 主容器 (手機框體效果) -->
   <div class="device-frame">
@@ -223,8 +242,11 @@
           
           <div class="memo-drawer-scroll">
             <section class="card memo-placeholder-card">
-              <div class="card-header">
-                <span class="section-title">隨筆</span>
+              <div class="card-header memo-drawer-header">
+                <div class="memo-title-block">
+                  <span class="memo-drawer-title">MEMO</span>
+                  <span class="memo-drawer-subtitle">1095 JOURNAL / DAILY RECORD</span>
+                </div>
                 <i data-lucide="bookmark" class="icon-muted"></i>
               </div>
               
@@ -281,19 +303,28 @@
     <div class="app-container hidden" id="weekly-page">
       <header class="page-header" style="position: relative;">
         <h1 class="header-title">WEEKLY</h1>
-        <div class="weekly-subtitle-container">
-          <button class="btn-week-nav" id="btn-prev-week" title="前一週">
-            <i data-lucide="chevron-left"></i>
-          </button>
-          <span class="header-subtitle yearly-subtitle" id="weekly-range-text">7/9 - 7/15</span>
-          <button class="btn-week-nav" id="btn-next-week" title="後一週" disabled>
-            <i data-lucide="chevron-right"></i>
-          </button>
-        </div>
+        <span class="header-subtitle yearly-subtitle weekly-header-subtitle" id="weekly-header-tag">WEEK 48</span>
       </header>
       
-      <main class="page-content weekly-content" id="weekly-review-list">
-        <!-- 由 JS 動態渲染 7 天的日記卡片 (DiaryReviewCard) -->
+      <main class="page-content weekly-content">
+        <div class="planner-sheet">
+          <div class="planner-sheet-top-guide">
+            <span class="guide-month" id="weekly-month-text">NOVEMBER</span>
+            <div class="weekly-subtitle-container">
+              <button class="btn-week-nav" id="btn-prev-week" title="前一週">
+                <i data-lucide="chevron-left"></i>
+              </button>
+              <span class="guide-tag planner-range-text" id="weekly-range-text">11/19 — 11/25</span>
+              <button class="btn-week-nav" id="btn-next-week" title="後一週" disabled>
+                <i data-lucide="chevron-right"></i>
+              </button>
+            </div>
+          </div>
+          
+          <div class="planner-days-list" id="weekly-review-list">
+            <!-- 由 JS 動態渲染 7 天的日記卡片 (DiaryReviewCard) -->
+          </div>
+        </div>
       </main>
     </div>
 
@@ -644,8 +675,11 @@
          <div class="memo-drawer-handle" id="btn-close-review-memo" title="收起隨筆"></div>
          
          <div class="memo-drawer-scroll" style="padding: var(--space-xl) var(--space-xl) 30px var(--space-xl);">
-           <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
-             <h3 class="drawer-section-title" id="review-memo-title" style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin: 0;">隨筆</h3>
+           <header class="memo-drawer-header" style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 1px solid rgba(0, 0, 0, 0.06);">
+             <div class="memo-title-block">
+               <span class="memo-drawer-title" id="review-memo-title">MEMO</span>
+               <span class="memo-drawer-subtitle" id="review-memo-subtitle">1095 JOURNAL / DAILY RECORD</span>
+             </div>
              <button id="btn-close-review-memo-x" style="background: none; border: none; cursor: pointer; padding: 8px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-sub); border-radius: 4px; outline: none; transition: opacity 0.15s ease;" title="關閉">
                <i data-lucide="x" style="width: 15px; height: 15px;"></i>
              </button>
@@ -664,7 +698,7 @@
       <div class="memo-drawer-handle" id="btn-close-edit-diary" title="收起編輯"></div>
       <div class="memo-drawer-scroll" style="padding: var(--space-xl) var(--space-xl) 30px var(--space-xl); display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
         
-        <h3 class="drawer-section-title" id="edit-diary-drawer-title" style="font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-text-main); margin-bottom: var(--space-md); text-align: left; padding-left: 2px;">編輯日記</h3>
+        <h3 class="drawer-section-title" id="edit-diary-drawer-title">EDIT</h3>
         
         <!-- 日記編輯主要卡片 -->
         <div class="card diary-editor-card" style="box-shadow: none; border: 1px solid var(--color-border); margin-bottom: var(--space-lg); display: flex; flex-direction: column;">
@@ -745,7 +779,7 @@
   <script src="crypto-service.js?v=6"></script>
   <script src="export-service.js?v=6"></script>
   <script src="db.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=9"></script>
   
   <!-- Firebase Synchronization Layer -->
   <script src="firebase-sync.js"></script>

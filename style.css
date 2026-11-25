@@ -1462,11 +1462,13 @@ body {
 }
 
 .modal-date-title {
-  font-family: var(--font-sans);
-  font-size: 1.15rem;
+  font-family: 'Special Elite', monospace;
+  font-size: 1.35rem;
   font-weight: 700;
-  color: var(--color-text-main);
-  letter-spacing: -0.01em;
+  color: #242238; /* 微紫墨色帶印章感 (同 Memo 時間戳記) */
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  display: inline-block;
 }
 
 .btn-close-modal {
@@ -2526,4 +2528,18 @@ textarea:focus {
 #memo-drawer #memo-timeline-list .action-link.delete-link:hover,
 #review-memo-drawer #review-memo-timeline-list .action-link.delete-link:hover {
   color: var(--color-text-red) !important;
+}
+
+/* 8. 編輯日記抽屜標題 (Special Elite 印章字體 + Noto Serif TC，同 Memo 時間戳記風格) */
+#edit-diary-drawer-title {
+  font-family: 'Special Elite', 'Noto Serif TC', serif !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: #242238 !important; /* 微紫墨色帶印章感 (同 Memo 時間戳記) */
+  letter-spacing: 0.04em !important;
+  line-height: 1.2 !important;
+  margin-bottom: var(--space-md) !important;
+  text-align: left !important;
+  padding-left: 2px !important;
+  display: inline-block !important;
 }
