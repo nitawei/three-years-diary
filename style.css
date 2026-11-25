@@ -1637,6 +1637,7 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
   overflow: hidden;
   position: relative;
+  flex-shrink: 0;
 }
 
 /* 頂部手帳月份與日期按鈕導引列 (左: NOVEMBER，右: < 11/19 — 11/25 >) */
