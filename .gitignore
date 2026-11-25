@@ -45,3 +45,9 @@ browser-tests.js
 .DS_Store
 Thumbs.db
 .vercel
+
+# Local scratch & preview artifacts
+.agent/
+.agents/
+.gemini/
+previews/

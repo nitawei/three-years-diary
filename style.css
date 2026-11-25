@@ -221,13 +221,15 @@ body {
 }
 
 .header-title {
-  font-family: var(--font-sans);
+  font-family: 'Special Elite', monospace;
   font-size: 3rem; /* Enlarge significantly */
   font-weight: 700;
   text-transform: uppercase;
-  color: #434343; /* Changed to #434343 */
-  letter-spacing: -0.03em;
+  color: #434343; /* 原本的灰色 */
+  letter-spacing: -0.02em;
   line-height: 0.9;
+  filter: url(#ink-bite);
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.35);
 }
 
 .header-subtitle {
@@ -1301,6 +1303,17 @@ body {
   contain-intrinsic-size: 720px;
 }
 
+.garden-year-card .section-title {
+  font-family: 'Special Elite', monospace !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: #1F1F21 !important;
+  letter-spacing: 0.1em !important;
+  line-height: 1 !important;
+  filter: url(#ink-bite) !important;
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.35) !important;
+}
+
 .text-accent {
   color: #434343 !important;
   font-weight: 700 !important;
@@ -1593,8 +1606,7 @@ body {
 .weekly-content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 20px 24px 20px;
+  padding: 6px 16px 20px 16px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch; /* Momentum scrolling */
   flex: 1;
@@ -1605,95 +1617,226 @@ body {
   display: none;
 }
 
-.weekly-subtitle-container {
-  margin-left: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.weekly-header-subtitle {
   font-family: var(--font-sans);
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--color-text-sub);
+  letter-spacing: 0.04em;
+  margin-left: 8px;
 }
 
-.btn-week-nav {
+/* ==========================================================================
+   新版：日式橫式週計劃手帳排版 (Japanese Ruled Weekly Planner)
+   單整頁手帳紙質載體 (Continuous Ruled Journal Sheet)
+   ========================================================================== */
+.planner-sheet {
+  background-color: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+  position: relative;
+}
+
+/* 頂部手帳月份與日期按鈕導引列 (左: NOVEMBER，右: < 11/19 — 11/25 >) */
+.planner-sheet-top-guide {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid var(--color-border);
+  font-family: 'Courier Prime', var(--font-typewriter, monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #48484A;
+  text-transform: uppercase;
+}
+
+.planner-sheet-top-guide .guide-month {
+  font-family: 'Courier Prime', var(--font-typewriter, monospace);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #1C1C1E;
+}
+
+.planner-sheet-top-guide .weekly-subtitle-container {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.planner-sheet-top-guide .planner-range-text {
+  font-family: 'Courier Prime', var(--font-typewriter, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #71717A;
+  user-select: none;
+  padding: 0 4px;
+}
+
+.planner-sheet-top-guide .btn-week-nav {
   background: none;
   border: none;
-  color: var(--color-text-sub);
+  color: #8E8E93;
   cursor: pointer;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 4px;
-  border-radius: 50%;
+  padding: 3px;
+  border-radius: 4px;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.btn-week-nav:hover:not(:disabled) {
-  background-color: var(--color-primary-light);
-  color: var(--color-text-main);
+.planner-sheet-top-guide .btn-week-nav:hover:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.06);
+  color: #1C1C1E;
 }
 
-.btn-week-nav:disabled {
-  opacity: 0.3;
+.planner-sheet-top-guide .btn-week-nav:disabled {
+  opacity: 0.25;
   cursor: not-allowed;
 }
 
-.btn-week-nav i {
-  width: 14px;
-  height: 14px;
+.planner-sheet-top-guide .btn-week-nav i {
+  width: 13px;
+  height: 13px;
 }
 
-/* DiaryReviewCard component styling */
-.diary-review-card {
-  background-color: var(--color-card-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 16px;
+/* 手帳 7 天橫條列表 */
+.planner-days-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+}
+
+/* 單日手帳條目 (DiaryReviewCard / planner-day-row) */
+.diary-review-card {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  min-height: 82px;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.15s ease;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
   contain: content;
 }
 
+.diary-review-card:last-child {
+  border-bottom: none;
+}
+
 .diary-review-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+  transform: none;
+  box-shadow: none;
+  background-color: rgba(0, 0, 0, 0.015);
 }
 
-.diary-review-card-header {
+/* 當天的高亮效果 */
+.diary-review-card.is-today {
+  background-color: rgba(234, 239, 245, 0.28);
+}
+
+.diary-review-card.is-today::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3.5px;
+  background-color: #3A4A5B;
+  border-radius: 0 2px 2px 0;
+}
+
+/* 左側：日期欄 (Date Column) */
+.day-date-col {
+  border-right: 1px solid var(--color-border);
+  padding: 12px 6px;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  user-select: none;
+  background-color: rgba(0, 0, 0, 0.01);
 }
 
-.diary-review-card-date {
-  font-family: var(--font-sans);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-text-sub);
-  letter-spacing: 0.01em;
-}
-
-.diary-review-card-today-label {
-  color: var(--color-text-main);
-  background-color: var(--color-primary-light);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+/* 日期大數字：套用 Memo 時間戳記之打卡鐘字體與效果 (Special Elite, -2.5deg 傾斜, #242238 微紫墨印泥色) */
+.date-num {
+  font-family: 'Special Elite', monospace;
+  font-size: 1.45rem;
   font-weight: 700;
-  margin-left: 6px;
+  line-height: 1;
+  color: #242238; /* 微紫墨色帶印章感 */
+  letter-spacing: 0.02em;
+  transform: rotate(-2.5deg);
+  display: inline-block;
+  transform-origin: center center;
 }
 
-.diary-review-card-mood-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #c7c7cc;
+/* 英文星期縮寫 (MON, TUE...) */
+.weekday-text {
+  font-family: 'Courier Prime', var(--font-typewriter, monospace);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8E8E93;
+  margin-top: 4px;
+  text-transform: uppercase;
 }
 
+/* 週末色系區隔 (打卡印泥深藍與深紅) */
+.diary-review-card.is-saturday .date-num {
+  color: #2E4D68; /* 週末打卡印泥深藍 */
+}
+
+.diary-review-card.is-saturday .weekday-text {
+  color: #4A6E82;
+}
+
+.diary-review-card.is-sunday .date-num {
+  color: #8B2E24; /* 週末打卡印泥深紅 */
+}
+
+.diary-review-card.is-sunday .weekday-text {
+  color: #A34838;
+}
+
+/* 今日 TODAY 戳記印標 */
+.today-badge-stamp {
+  font-family: 'Courier Prime', var(--font-typewriter, monospace);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  background-color: #2C2C2E;
+  color: #FFFFFF;
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-top: 5px;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+/* 右側：日記內容書寫區 (純白無橫線底色) */
+.day-content-col {
+  padding: 12px 14px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  background-color: #FFFFFF;
+}
+
+/* 日記內文：維持原版字級 (1.05rem, 600, line-height 1.6)，心情顏色直接套用在文字本身 */
+.day-diary-text,
 .diary-review-card-body {
   font-family: 'Noto Serif TC', serif;
   font-size: 1.05rem;
@@ -1705,14 +1848,44 @@ body {
   text-align: justify;
 }
 
+/* 空白狀態：使用已寫日記同樣的字體 (Noto Serif TC)，但使用原本的淡色 */
+.day-empty-placeholder,
 .diary-review-card-empty {
-  font-family: var(--font-sans);
-  font-size: 0.85rem;
+  font-family: 'Noto Serif TC', serif;
+  font-size: 1.05rem;
   font-weight: 500;
   color: var(--color-text-sub);
   opacity: 0.5;
-  font-style: italic;
+  line-height: 1.6;
   margin: 0;
+  padding: 0;
+  display: block;
+}
+
+/* 底部輔助列 (Meta Row: 只保留隨筆指示器，不顯示心情圓點) */
+.day-meta-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 6px;
+}
+
+/* 隨筆指示器 (Memo Indicator) */
+.day-memo-indicator {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+  opacity: 0.85;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.day-memo-indicator:hover {
+  opacity: 1;
+  color: var(--color-text-main);
 }
 
 /* Partner Diary card specific styles */
@@ -2166,4 +2339,190 @@ textarea:focus {
 .btn-crop-confirm:hover {
   opacity: 0.9;
   transform: scale(1.02);
+}
+
+
+/* ==========================================================================
+   Memo Drawers - Heavy Distress Typography (今日 Memo 抽屜 & 歷史唯讀 Memo 抽屜)
+   嚴格限定於 #memo-drawer 與 #review-memo-drawer，絕不影響筆友交換與卡片
+   ========================================================================== */
+
+/* 1. 今日 Memo 抽屜與歷史回顧 Memo 抽屜標題列 (MEMO + 英文副標) */
+#memo-drawer .memo-drawer-header,
+#review-memo-drawer .memo-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+#memo-drawer .memo-title-block,
+#review-memo-drawer .memo-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#memo-drawer .memo-drawer-title,
+#review-memo-drawer #review-memo-title {
+  font-family: 'Special Elite', monospace !important;
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+  color: #1F1F21 !important;
+  letter-spacing: 0.14em !important;
+  line-height: 1 !important;
+  filter: url(#ink-bite) !important;
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.35) !important;
+}
+
+#memo-drawer .memo-drawer-subtitle,
+#review-memo-drawer #review-memo-subtitle {
+  font-family: 'Special Elite', monospace !important;
+  font-size: 0.65rem !important;
+  letter-spacing: 0.12em !important;
+  color: #8E8E93 !important;
+  text-transform: uppercase !important;
+}
+
+/* 2. 抽屜空狀態提示文字 (Heavy Distress) */
+#memo-drawer .empty-state,
+#review-memo-drawer .empty-state {
+  font-family: 'Noto Serif TC', serif !important;
+  font-weight: 700 !important;
+  color: #1C1C1E !important;
+  font-size: 0.95rem !important;
+  filter: url(#distress-heavy) !important;
+  letter-spacing: 0.04em !important;
+  text-align: center;
+  padding: 36px 0 !important;
+}
+
+/* 3. 抽屜輸入區操作性文字 (清楚易讀無濾鏡) */
+#memo-drawer #memo-textarea {
+  font-family: 'Noto Serif TC', serif;
+  font-weight: 700;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #1C1C1E;
+  background-color: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  filter: none !important;
+}
+
+#memo-drawer #memo-textarea::placeholder {
+  font-family: 'Noto Serif TC', serif;
+  font-weight: 700;
+  color: rgba(28, 28, 30, 0.42);
+  filter: none !important;
+}
+
+#memo-drawer .btn-add-photos {
+  font-family: 'Noto Serif TC', serif;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: #4A5568;
+  background-color: #EAEFF5;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  filter: none !important;
+}
+
+#memo-drawer #upload-status-text {
+  font-family: 'Noto Serif TC', serif;
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: var(--color-text-sub);
+  filter: none !important;
+}
+
+#memo-drawer #btn-submit-memo {
+  font-family: 'Special Elite', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  background-color: #2C2C2E;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  padding: 5px 16px;
+  filter: none !important;
+}
+
+#memo-drawer .memo-capacity-text {
+  font-family: 'Special Elite', 'Noto Serif TC', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--color-text-sub);
+  filter: none !important;
+}
+
+/* 4. 抽屜時間軸項目格網佈局 (覆寫特定抽屜，不改共用 #partner-paired-memos-list) */
+#memo-drawer #memo-timeline-list .timeline-item {
+  display: grid !important;
+  grid-template-columns: 58px 1fr !important;
+  gap: 14px !important;
+  align-items: flex-start !important;
+  padding: 10px 0 !important;
+}
+
+#review-memo-drawer #review-memo-timeline-list .timeline-item {
+  display: grid !important;
+  grid-template-columns: 58px 1fr !important;
+  gap: 14px !important;
+  align-items: flex-start !important;
+  padding: 8px 0 !important;
+}
+
+/* 5. 抽屜時間戳記 (Special Elite 傾斜 -2.5deg，清楚易讀無濾鏡) */
+#memo-drawer #memo-timeline-list .item-time,
+#review-memo-drawer #review-memo-timeline-list .item-time {
+  font-family: 'Special Elite', monospace !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #242238 !important; /* 微紫墨色帶印章感 */
+  transform: rotate(-2.5deg) !important;
+  display: inline-block !important;
+  line-height: 1.1 !important;
+  letter-spacing: 0.02em !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  padding-right: 10px;
+  filter: none !important;
+}
+
+/* 6. 抽屜 Memo 正文 (Noto Serif TC Bold 700 + Heavy Distress 濾鏡) */
+#memo-drawer #memo-timeline-list .item-text,
+#review-memo-drawer #review-memo-timeline-list .item-text {
+  font-family: 'Noto Serif TC', serif !important;
+  font-weight: 700 !important;
+  font-size: 0.92rem !important;
+  line-height: 1.76 !important;
+  color: #1A1A1C !important;
+  letter-spacing: 0.04em !important;
+  filter: url(#distress-heavy) !important;
+  word-break: break-word !important;
+}
+
+/* 7. 抽屜操作連結 [ 編輯 ] [ 刪除 ] (清楚易讀無濾鏡，刪除鍵維持原版深紅) */
+#memo-drawer #memo-timeline-list .action-link,
+#review-memo-drawer #review-memo-timeline-list .action-link {
+  font-family: 'Noto Serif TC', serif !important;
+  font-weight: 700 !important;
+  font-size: 0.74rem !important;
+  color: #7E7E84 !important;
+  cursor: pointer !important;
+  filter: none !important;
+  letter-spacing: 0.04em !important;
+}
+
+#memo-drawer #memo-timeline-list .action-link.delete-link,
+#review-memo-drawer #review-memo-timeline-list .action-link.delete-link {
+  color: var(--color-text-red) !important;
+}
+
+#memo-drawer #memo-timeline-list .action-link.delete-link:hover,
+#review-memo-drawer #review-memo-timeline-list .action-link.delete-link:hover {
+  color: var(--color-text-red) !important;
 }

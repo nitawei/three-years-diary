@@ -4788,8 +4788,10 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
         userMemoBtn.onclick = async () => {
           const reviewMemoDrawer = document.getElementById('review-memo-drawer');
           const reviewMemoTitle = document.getElementById('review-memo-title');
+          const reviewMemoSubtitle = document.getElementById('review-memo-subtitle');
           if (reviewMemoDrawer && reviewMemoTitle) {
-            reviewMemoTitle.textContent = `${formattedDate} 隨筆`;
+            reviewMemoTitle.textContent = 'MEMO';
+            if (reviewMemoSubtitle) reviewMemoSubtitle.textContent = `1095 JOURNAL / ${formattedDate}`;
             renderReviewMemoTimeline(userMemos);
             reviewMemoDrawer.classList.remove('hidden');
           }
@@ -4831,8 +4833,10 @@ async function showGardenDetailModal(dateStr, isCurrentWeekReview = false) {
               partnerMemoBtn.onclick = async () => {
                 const reviewMemoDrawer = document.getElementById('review-memo-drawer');
                 const reviewMemoTitle = document.getElementById('review-memo-title');
+                const reviewMemoSubtitle = document.getElementById('review-memo-subtitle');
                 if (reviewMemoDrawer && reviewMemoTitle) {
-                  reviewMemoTitle.textContent = `${formattedDate} ${partnerName} 的隨筆`;
+                  reviewMemoTitle.textContent = 'MEMO';
+                  if (reviewMemoSubtitle) reviewMemoSubtitle.textContent = `1095 JOURNAL / ${formattedDate} (${partnerName})`;
                   renderReviewMemoTimeline(partnerMemos);
                   reviewMemoDrawer.classList.remove('hidden');
                 }
@@ -5123,8 +5127,10 @@ async function renderPartnerYesterdaySection() {
         e.stopPropagation();
         const reviewMemoDrawer = document.getElementById('review-memo-drawer');
         const reviewMemoTitle = document.getElementById('review-memo-title');
+        const reviewMemoSubtitle = document.getElementById('review-memo-subtitle');
         if (reviewMemoDrawer && reviewMemoTitle) {
-          reviewMemoTitle.textContent = `${partnerName} 的隨筆`;
+          reviewMemoTitle.textContent = 'MEMO';
+          if (reviewMemoSubtitle) reviewMemoSubtitle.textContent = `1095 JOURNAL / ${partnerName}`;
           renderReviewMemoTimeline(partnerMemos);
           reviewMemoDrawer.classList.remove('hidden');
         }
@@ -5241,6 +5247,8 @@ async function renderWeeklyReview() {
   const rangeText = document.getElementById('weekly-range-text');
   const reviewList = document.getElementById('weekly-review-list');
   const btnNext = document.getElementById('btn-next-week');
+  const headerTag = document.getElementById('weekly-header-tag');
+  const monthText = document.getElementById('weekly-month-text');
   
   if (!reviewList) return;
   
@@ -5259,13 +5267,13 @@ async function renderWeeklyReview() {
     dates.push(`${yyyy}-${mm}-${dd}`);
   }
   
-  // 更新範圍文字 (例如: 7/9 - 7/15)
+  // 更新手帳紙頂部導引欄範圍文字 (例如: 11/19 — 11/25)
   if (rangeText && dates.length > 0) {
     const [sY, sM, sD] = dates[6].split('-').map(Number);
     const [eY, eM, eD] = dates[0].split('-').map(Number);
     const startStr = `${sM}/${sD}`;
     const endStr = `${eM}/${eD}`;
-    rangeText.textContent = `${startStr} - ${endStr}`;
+    rangeText.textContent = `${startStr} — ${endStr}`;
   }
   
   // 設定後一週按鈕的啟用狀態
@@ -5273,9 +5281,30 @@ async function renderWeeklyReview() {
     btnNext.disabled = (State.weeklyOffset === 0);
   }
   
-  // Safeguard 3: Atomic DOM rendering using DocumentFragment
-  const fragment = (typeof document !== 'undefined' && typeof document.createDocumentFragment === 'function') 
-    ? document.createDocumentFragment() 
+  // 計算手帳頂部導引欄月份名稱
+  const MONTH_NAMES = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const [latestY, latestM] = dates[0].split('-').map(Number);
+  const monthName = MONTH_NAMES[latestM - 1] || 'MONTH';
+  if (monthText) {
+    monthText.textContent = monthName;
+  }
+  
+  // ISO-8601 週數計算（呈現在頁面頂部大標題旁邊，字體為 Outfit）
+  function getISOWeekNumber(d) {
+    const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNr = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - dayNr);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    return Math.ceil((((target - yearStart) / 86400000) + 1) / 7);
+  }
+  const weekNum = getISOWeekNumber(baseDate);
+  if (headerTag) {
+    headerTag.textContent = `WEEK ${weekNum}`;
+  }
+
+  // 7 天橫條容器原子替換
+  const fragment = (typeof document !== 'undefined' && typeof document.createDocumentFragment === 'function')
+    ? document.createDocumentFragment()
     : [];
   const newCardMap = new Map();
 
@@ -5303,6 +5332,7 @@ async function renderWeeklyReview() {
     reviewList.innerHTML = '';
     fragment.forEach(node => reviewList.appendChild(node));
   }
+
   weeklyCardMap.clear();
   newCardMap.forEach((node, date) => weeklyCardMap.set(date, node));
 
@@ -5312,7 +5342,7 @@ async function renderWeeklyReview() {
   } catch (e) {}
 }
 
-// 3. DiaryReviewCard 元件：產生單日日記展示卡片 DOM
+// 3. DiaryReviewCard 元件：產生單日日記手帳條目 DOM (Japanese Ruled Weekly Planner Row)
 function createDiaryReviewCard(dateStr, diary, memos) {
   const card = document.createElement('div');
   card.className = 'diary-review-card';
@@ -5320,43 +5350,53 @@ function createDiaryReviewCard(dateStr, diary, memos) {
   
   // 格式化日期與星期
   const parts = dateStr.split('-');
-  const formattedDate = `${parts[0]}.${parts[1]}.${parts[2]}`;
-  const weekdayStr = getChineseWeekday(dateStr);
+  const dayNum = String(Number(parts[2]));
+  const dObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  const dayOfWeek = dObj.getDay(); // 0 是週日, 6 是週六
+  const EN_WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const weekdayEn = EN_WEEKDAYS[dayOfWeek];
   
-  // 判斷是否為今天
-  const isTodayStr = (dateStr === TODAY_DATE_STR) ? ' · 今天' : '';
+  // 判斷是否為今天、週六、週日
+  const isToday = (dateStr === TODAY_DATE_STR);
+  if (isToday) card.classList.add('is-today');
+  if (dayOfWeek === 6) card.classList.add('is-saturday');
+  if (dayOfWeek === 0) card.classList.add('is-sunday');
   
-  // 卡片標頭 (安靜手帳風格，僅保留日期標籤，移除多餘的刪除鍵與心情圓點)
-  const header = document.createElement('div');
-  header.className = 'diary-review-card-header';
+  // 左側：日期欄 (Date Column: 打卡數字 + 星期縮寫 + TODAY 印標)
+  const dateCol = document.createElement('div');
+  dateCol.className = 'day-date-col';
+  dateCol.innerHTML = `
+    <span class="date-num">${dayNum}</span>
+    <span class="weekday-text">${weekdayEn}</span>
+    ${isToday ? '<span class="today-badge-stamp">TODAY</span>' : ''}
+  `;
+  card.appendChild(dateCol);
   
-  const dateLabel = document.createElement('span');
-  dateLabel.className = 'diary-review-card-date';
-  dateLabel.textContent = `${formattedDate} (${weekdayStr})${isTodayStr}`;
+  // 右側：日記內容書寫區 (Content Column)
+  const contentCol = document.createElement('div');
+  contentCol.className = 'day-content-col';
   
-  header.appendChild(dateLabel);
-  card.appendChild(header);
-  
-  // 卡片內容
   const mood = diary ? diary.mood : 'none';
-  if (diary && diary.content.trim()) {
+  if (diary && diary.content && diary.content.trim()) {
     const body = document.createElement('p');
-    body.className = 'diary-review-card-body';
+    body.className = 'diary-review-card-body day-diary-text';
     body.textContent = diary.content;
     
     // 心情顏色套用至字體
     body.style.setProperty('--mood-color', MOOD_COLORS[mood] ? MOOD_COLORS[mood].text : '#434343');
-    card.appendChild(body);
+    contentCol.appendChild(body);
+    // 依使用者指示：週記手帳畫面不顯示隨筆計數指示器
   } else {
     const emptyMsg = document.createElement('p');
-    emptyMsg.className = 'diary-review-card-empty';
-    emptyMsg.textContent = '今天沒有寫下任何日記字句。';
-    card.appendChild(emptyMsg);
+    emptyMsg.className = 'diary-review-card-empty day-empty-placeholder';
+    emptyMsg.textContent = '今天沒有寫下任何日記...';
+    contentCol.appendChild(emptyMsg);
   }
+  card.appendChild(contentCol);
 
   // 點擊事件交互處理 (點進去才會進入詳細對照彈窗查看隨筆數、進行編輯或刪除)
   card.addEventListener('click', async () => {
-    if (diary && diary.content.trim()) {
+    if (diary && diary.content && diary.content.trim()) {
       await showGardenDetailModal(dateStr);
     } else {
       // 無日記，點擊直接打開編輯抽屜
@@ -5521,8 +5561,10 @@ async function renderPreviousYearsReview() {
             e.stopPropagation();
             const reviewMemoDrawer = document.getElementById('review-memo-drawer');
             const reviewMemoTitle = document.getElementById('review-memo-title');
+            const reviewMemoSubtitle = document.getElementById('review-memo-subtitle');
             if (reviewMemoDrawer && reviewMemoTitle) {
-              reviewMemoTitle.textContent = '隨筆';
+              reviewMemoTitle.textContent = 'MEMO';
+              if (reviewMemoSubtitle) reviewMemoSubtitle.textContent = '1095 JOURNAL / DAILY RECORD';
               renderReviewMemoTimeline(memos);
               reviewMemoDrawer.classList.remove('hidden');
             }
