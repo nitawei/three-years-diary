@@ -1288,6 +1288,8 @@ body {
 .garden-content {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: 16px;
   padding: 0 20px 24px 20px;
   scrollbar-width: none;
 }
@@ -1298,6 +1300,8 @@ body {
 .garden-year-card {
   margin-bottom: 24px;
   padding: 16px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
   contain: content;
   content-visibility: auto;
   contain-intrinsic-size: 720px;
@@ -1635,7 +1639,7 @@ body {
 .planner-sheet {
   background-color: #FFFFFF;
   border: 1px solid rgba(0, 0, 0, 0.09);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
   overflow: hidden;
   position: relative;
